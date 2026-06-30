@@ -1,7 +1,7 @@
 # Prosper Challenge — run everything from the repo root.
+# Dependencies are managed with uv (https://docs.astral.sh/uv/).
 
-VENV := backend/.venv
-PYTHON := $(VENV)/bin/python
+PROJECT := backend
 
 .PHONY: help install run clean
 
@@ -9,14 +9,12 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
-install: ## Create the venv and install dependencies
-	python3 -m venv $(VENV)
-	$(PYTHON) -m pip install --upgrade pip
-	$(PYTHON) -m pip install -r backend/requirements.txt
+install: ## Create the venv and install dependencies (from uv.lock)
+	uv sync --directory $(PROJECT)
 
 run: ## Run the voice agent (then open http://localhost:7860/client)
-	$(PYTHON) backend/bot.py
+	uv run --directory $(PROJECT) python bot.py
 
 clean: ## Remove the venv and Python caches
-	rm -rf $(VENV)
-	find backend -type d -name __pycache__ -prune -exec rm -rf {} +
+	rm -rf $(PROJECT)/.venv
+	find $(PROJECT) -type d -name __pycache__ -prune -exec rm -rf {} +

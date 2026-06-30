@@ -13,14 +13,21 @@ Pipecat's dev runner ships a **prebuilt browser client**, so the test-call UI co
 
 ## Quickstart
 
-Requires **Python 3.11+**. Run from the repo root:
+Requires **Python 3.11+** and [**uv**](https://docs.astral.sh/uv/getting-started/installation/) (uv will fetch a matching Python for you if needed). Run from the repo root:
 
 ```bash
-make install
-make run
+make install   # uv sync — creates backend/.venv and installs from uv.lock
+make run       # uv run python bot.py
 ```
 
-Open the URL it prints (default `http://localhost:7860/client`), click **Connect**, allow mic access, and talk to the agent. `Ctrl+C` to stop. (`make help` lists all targets.)\
+Open the URL it prints (default `http://localhost:7860/client`), click **Connect**, allow mic access, and talk to the agent. `Ctrl+C` to stop. (`make help` lists all targets.)
+
+Prefer raw `uv`? The same commands without `make`:
+
+```bash
+uv sync --directory backend            # install dependencies
+uv run --directory backend python bot.py   # run the agent
+```\
 \
 Remember to update the `.env` file accordingly.
 
