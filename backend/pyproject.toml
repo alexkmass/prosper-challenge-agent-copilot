@@ -13,9 +13,28 @@ dependencies = [
     "pipecat-ai[runner,webrtc,silero,elevenlabs,openai]>=1.4.0,<2",
     # Pipecat Flows: node-graph conversations (used by the agent builder + bot).
     "pipecat-ai-flows>=1.3.0,<2",
+    # Used directly by copilot.py (structured-output Responses API calls),
+    # not just as a transitive pipecat dependency.
+    "openai>=1.99,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.24,<1",
 ]
 
 [tool.uv]
 # This is an application (flat modules: bot.py + agent_builder/), not a
 # distributable library — manage the environment, don't build/install a package.
 package = false
+# `uv sync` installs the dev group (pytest) too, by default — no separate
+# --group flag needed just to run the test suite.
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+markers = [
+    "llm: hits the real OpenAI API — needs OPENAI_API_KEY, costs tokens, and is slower/non-deterministic.",
+]

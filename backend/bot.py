@@ -2,11 +2,13 @@
 # Voice pipeline — Prosper Product Engineer Challenge
 #
 # The runnable voice agent: WebRTC transport + ElevenLabs STT/TTS + OpenAI LLM,
-# driven by a Pipecat Flows node graph. This file is generic — it loads an agent
-# definition (JSON) via AgentBuilder and runs it. Swapping the agent is a data
-# change (edit/replace the JSON), not a code change.
+# driven by a Pipecat Flows node graph. This file is generic — it loads the
+# store's *active* agent and runs it. The Pipecat dev runner invokes bot() fresh
+# on every new WebRTC connection, so resolving the active agent here (rather
+# than once at import time) means edits saved from the UI take effect on the
+# very next test call — no backend restart needed.
 #
-#   example_flow.json  ->  AgentBuilder  ->  Pipecat Flows graph  ->  FlowManager
+#   store.get(active_id)  ->  AgentBuilder  ->  Pipecat Flows graph  ->  FlowManager
 #
 # Run:  python bot.py   then open http://localhost:7860/client
 #
@@ -35,14 +37,11 @@ from pipecat.workers.runner import WorkerRunner
 from pipecat_flows import FlowManager
 
 from agent_builder import AgentBuilder
+from call_log import call_log
+from store import store
 
 # Load .env next to this file, so the bot runs the same from the repo root or backend/.
 load_dotenv(Path(__file__).parent / ".env", override=True)
-
-
-# The agent this bot runs. Point this at any agent JSON (the Phase 2 Composer
-# would generate one and drop it here).
-AGENT_FLOW = Path(__file__).parent / "example_flow.json"
 
 
 transport_params = {
@@ -97,11 +96,13 @@ async def run_bot(
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info("Client connected — starting flow at initial node")
+        call_log.start(config.initial_node)
         await flow_manager.initialize(builder.build_initial_node())
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         logger.info("Client disconnected")
+        call_log.end()
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
@@ -110,13 +111,24 @@ async def run_bot(
 
 
 async def bot(runner_args: RunnerArguments):
-    """Entry point invoked by the Pipecat dev runner (and Pipecat Cloud)."""
+    """Entry point invoked by the Pipecat dev runner (and Pipecat Cloud).
+
+    Invoked fresh per connection, so this always picks up whatever agent is
+    currently marked active in the store — including edits saved seconds ago.
+    """
     transport = await create_transport(runner_args, transport_params)
-    builder = AgentBuilder.from_json(AGENT_FLOW)
+    active_id = store.get_active_id()
+    builder = AgentBuilder.from_dict(store.get(active_id), on_transition=call_log.record_transition)
     await run_bot(transport, runner_args, builder)
 
 
 if __name__ == "__main__":
-    from pipecat.runner.run import main
+    from pipecat.runner.run import app, main
 
+    from api import calls_router, router as agents_router
+    from copilot import router as copilot_router
+
+    app.include_router(agents_router)
+    app.include_router(calls_router)
+    app.include_router(copilot_router)
     main()
