@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
-from openai import OpenAI
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from agent_builder import AgentBuilder
@@ -33,8 +33,11 @@ MOCK_CALLS_PATH = Path(__file__).parent / "mock_calls.json"
 COPILOT_MODEL = "gpt-4o-2024-08-06"
 
 
-def _client() -> OpenAI:
-    return OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+def _client() -> AsyncOpenAI:
+    # Async client — these routes are async def, and bot.py's WebRTC audio
+    # pipeline runs in this same process, so a blocking (sync) OpenAI call
+    # here would stall live audio for the duration of the request.
+    return AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
 # ---- shared agent-graph output schema (Build + Fix both emit this) --------
@@ -154,7 +157,7 @@ class BuildRequest(BaseModel):
 @router.post("/build")
 async def build_agent(body: BuildRequest):
     """Generate a full AgentConfig from natural-language client guidelines."""
-    response = _client().responses.parse(
+    response = await _client().responses.parse(
         model=COPILOT_MODEL,
         instructions=(
             AGENT_DESIGN_RULES
@@ -219,7 +222,7 @@ async def audit_calls(body: AuditRequest):
     if not calls:
         return {"issues": []}
 
-    response = _client().responses.parse(
+    response = await _client().responses.parse(
         model=COPILOT_MODEL,
         instructions=(
             "You are auditing recorded phone calls handled by the voice agent "
@@ -256,7 +259,7 @@ async def fix_issue(body: FixRequest):
     calls = _load_mock_calls(body.agent_id)
     call = next((c for c in calls if c["id"] == body.issue.call_id), None)
 
-    response = _client().responses.parse(
+    response = await _client().responses.parse(
         model=COPILOT_MODEL,
         instructions=(
             AGENT_DESIGN_RULES
