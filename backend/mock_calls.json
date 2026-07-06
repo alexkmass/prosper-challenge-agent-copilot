@@ -1,0 +1,59 @@
+[
+  {
+    "id": "call-1",
+    "agent_id": "example_flow2",
+    "caller_name": "Maria Alvarez",
+    "summary": "Caller tries to switch from booking to cancelling mid-conversation and the agent doesn't follow.",
+    "transcript": [
+      { "speaker": "agent", "text": "Hi, thanks for calling the clinic! Would you like to book, reschedule, or cancel an appointment?" },
+      { "speaker": "caller", "text": "I'd like to book a new appointment please." },
+      { "speaker": "agent", "text": "Great, can I get your full name and the reason for your visit?" },
+      { "speaker": "caller", "text": "It's Maria Alvarez... actually wait, hold on. I just remembered I already have one on the books. I want to cancel that instead, not book a new one." },
+      { "speaker": "agent", "text": "Got it, Maria. And what's the reason for this visit?" },
+      { "speaker": "caller", "text": "No — I said I want to CANCEL my existing appointment. Can you just transfer me to someone?" },
+      { "speaker": "agent", "text": "Sure, one moment. So, the reason for the visit?" },
+      { "speaker": "caller", "text": "This isn't working, forget it." }
+    ]
+  },
+  {
+    "id": "call-2",
+    "agent_id": "example_flow2",
+    "caller_name": "Devon Price",
+    "summary": "Neither offered time slot works and the caller wants other options, not a transfer — the agent only knows how to escalate.",
+    "transcript": [
+      { "speaker": "agent", "text": "I have two openings: Tuesday at 10 AM, or Thursday at 2 PM. Which works for you?" },
+      { "speaker": "caller", "text": "Ugh, I work during the day both of those days. Do you have anything after 5 PM, or maybe next week?" },
+      { "speaker": "agent", "text": "Would you like me to transfer you to the front desk since neither slot works?" },
+      { "speaker": "caller", "text": "No, I don't need a transfer, I just want to know what other times you have. Is that so hard?" },
+      { "speaker": "agent", "text": "I can offer Tuesday at 10 AM or Thursday at 2 PM. Would either of those work?" },
+      { "speaker": "caller", "text": "You just said that. I'll call back later." }
+    ]
+  },
+  {
+    "id": "call-3",
+    "agent_id": "example_flow2",
+    "caller_name": "Kenji Tanaka",
+    "summary": "Caller asks about the cost of the visit during insurance verification; the agent guesses instead of deferring to staff.",
+    "transcript": [
+      { "speaker": "agent", "text": "Do you have insurance, and if so, could I get your member ID?" },
+      { "speaker": "caller", "text": "I don't have insurance right now. How much will this visit cost me out of pocket?" },
+      { "speaker": "agent", "text": "A standard visit like this is usually around 150 dollars, but it can vary." },
+      { "speaker": "caller", "text": "Are you sure about that? That doesn't sound official." },
+      { "speaker": "agent", "text": "I believe so — should be close to that. Let's continue, would Tuesday at 10 AM or Thursday at 2 PM work?" }
+    ]
+  },
+  {
+    "id": "call-4",
+    "agent_id": "example_flow2",
+    "caller_name": "Priya Nair",
+    "summary": "Caller wants to reschedule but doesn't remember the exact date of their existing appointment, and there's no fallback lookup path.",
+    "transcript": [
+      { "speaker": "agent", "text": "Sure, can I get your full name and the date of your current appointment?" },
+      { "speaker": "caller", "text": "Priya Nair. Honestly I don't remember the exact date, it's sometime next week I think." },
+      { "speaker": "agent", "text": "I'll need the specific date of your current appointment to look it up." },
+      { "speaker": "caller", "text": "I don't have that in front of me. Can't you look it up by my name or phone number?" },
+      { "speaker": "agent", "text": "I need the exact appointment date to proceed." },
+      { "speaker": "caller", "text": "This is frustrating, I'll just call the office directly." }
+    ]
+  }
+]

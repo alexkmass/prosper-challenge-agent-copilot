@@ -18,6 +18,7 @@ dist/
 .venv/
 venv/
 env/
+.nltk_data/
 
 # ---- Node / frontend (Phase 1 UI later) ----
 node_modules/
@@ -31,3 +32,10 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# ---- AI tooling ----
+# Personal session config — not project config. Skills/commands under .claude/
+# ARE project config and should be committed, so these are listed individually
+# rather than ignoring .claude/ wholesale.
+.claude/settings.local.json
+.claude/launch.json

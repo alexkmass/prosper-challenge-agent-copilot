@@ -1,0 +1,186 @@
+{
+  "name": "Prosper Scheduler (Branched)",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "model": "gpt-4o",
+  "persona": "You are a warm, efficient scheduling assistant for a healthcare clinic. Your responses are spoken aloud, so avoid emojis, lists, or anything that can't be read out. Keep replies to one or two short sentences. Always use an available function to move the conversation forward.",
+  "initial_node": "greeting",
+  "nodes": [
+    {
+      "name": "greeting",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Greet the caller, say you're the clinic's scheduling assistant, and ask whether they'd like to book, reschedule, or cancel an appointment."
+        }
+      ],
+      "edges": [
+        {
+          "function": "route_book",
+          "description": "Caller wants to book a new appointment.",
+          "target": "collect_details",
+          "properties": {},
+          "required": []
+        },
+        {
+          "function": "route_reschedule",
+          "description": "Caller wants to reschedule an existing appointment.",
+          "target": "reschedule_lookup",
+          "properties": {},
+          "required": []
+        },
+        {
+          "function": "route_cancel",
+          "description": "Caller wants to cancel an appointment.",
+          "target": "cancel_flow",
+          "properties": {},
+          "required": []
+        }
+      ]
+    },
+    {
+      "name": "collect_details",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Collect the caller's full name and the reason for the visit. Ask for whatever is still missing, one question at a time."
+        }
+      ],
+      "edges": [
+        {
+          "function": "record_details",
+          "description": "Record the caller's name and reason once both are known.",
+          "target": "verify_insurance",
+          "properties": {
+            "full_name": { "type": "string", "description": "Caller's full name." },
+            "reason": { "type": "string", "description": "Reason for the visit." }
+          },
+          "required": ["full_name", "reason"]
+        }
+      ]
+    },
+    {
+      "name": "reschedule_lookup",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Ask for the caller's full name and their current appointment date so you can look it up."
+        }
+      ],
+      "edges": [
+        {
+          "function": "record_reschedule_info",
+          "description": "Record name and current appointment date once both are known.",
+          "target": "offer_times",
+          "properties": {
+            "full_name": { "type": "string", "description": "Caller's full name." },
+            "current_date": { "type": "string", "description": "Their existing appointment date." }
+          },
+          "required": ["full_name", "current_date"]
+        }
+      ]
+    },
+    {
+      "name": "cancel_flow",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Ask for the caller's full name and the date of the appointment they want to cancel. Confirm they want to proceed before cancelling."
+        }
+      ],
+      "edges": [
+        {
+          "function": "confirm_cancel",
+          "description": "Caller confirmed they want to cancel the appointment.",
+          "target": "cancel_done",
+          "properties": {
+            "full_name": { "type": "string", "description": "Caller's full name." },
+            "appointment_date": { "type": "string", "description": "Date of appointment to cancel." }
+          },
+          "required": ["full_name", "appointment_date"]
+        }
+      ]
+    },
+    {
+      "name": "verify_insurance",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Ask if the caller has insurance. If yes, collect their member ID. If self-pay, note that and continue."
+        }
+      ],
+      "edges": [
+        {
+          "function": "record_insurance",
+          "description": "Insurance status and member ID (if applicable) are known.",
+          "target": "offer_times",
+          "properties": {
+            "has_insurance": { "type": "boolean", "description": "Whether the caller has insurance." },
+            "member_id": { "type": "string", "description": "Insurance member ID, if they have insurance." }
+          },
+          "required": ["has_insurance"]
+        }
+      ]
+    },
+    {
+      "name": "offer_times",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Offer exactly two options: Tuesday at 10 AM, or Thursday at 2 PM. Ask which one works for them."
+        }
+      ],
+      "edges": [
+        {
+          "function": "select_time",
+          "description": "Record the slot the caller picks.",
+          "target": "confirm",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "enum": ["Tuesday 10 AM", "Thursday 2 PM"],
+              "description": "The chosen appointment slot."
+            }
+          },
+          "required": ["slot"]
+        },
+        {
+          "function": "escalate_no_availability",
+          "description": "Neither slot works and the caller wants to speak to staff.",
+          "target": "escalate",
+          "properties": {},
+          "required": []
+        }
+      ]
+    },
+    {
+      "name": "confirm",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Confirm the appointment back to the caller, including their name and the chosen time, thank them, and say goodbye."
+        }
+      ],
+      "end": true
+    },
+    {
+      "name": "cancel_done",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Confirm the appointment has been cancelled, thank the caller, and say goodbye."
+        }
+      ],
+      "end": true
+    },
+    {
+      "name": "escalate",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Apologize that the available slots didn't work. Tell the caller you're transferring them to the front desk and say goodbye."
+        }
+      ],
+      "end": true
+    }
+  ]
+}

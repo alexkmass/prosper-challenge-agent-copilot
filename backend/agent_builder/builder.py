@@ -11,26 +11,29 @@
 
 import json
 from pathlib import Path
-from typing import Union
+from typing import Callable, Optional, Union
 
 from loguru import logger
 from pipecat_flows import FlowManager, FlowsFunctionSchema, NodeConfig
 
 from .schema import AgentConfig, Edge, Node
 
+OnTransition = Callable[[str, str, dict], None]  # (function, target, collected) -> None
+
 
 class AgentBuilder:
     """Builds a runnable Pipecat Flows graph from a declarative AgentConfig."""
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig, on_transition: Optional[OnTransition] = None):
         self.config = config
         self._nodes_by_name = {n.name: n for n in config.nodes}
+        self._on_transition = on_transition
         self._validate()
 
     # ---- loading -----------------------------------------------------------
     @classmethod
-    def from_dict(cls, data: dict) -> "AgentBuilder":
-        return cls(AgentConfig.from_dict(data))
+    def from_dict(cls, data: dict, on_transition: Optional[OnTransition] = None) -> "AgentBuilder":
+        return cls(AgentConfig.from_dict(data), on_transition=on_transition)
 
     @classmethod
     def from_json(cls, path: Union[str, Path]) -> "AgentBuilder":
@@ -53,6 +56,22 @@ class AgentBuilder:
                         f"Edge '{edge.function}' in node '{node.name}' targets "
                         f"unknown node '{edge.target}'."
                     )
+            # A terminal node ends the call the moment it's entered (see _make_node),
+            # before any of its own edges could ever be taken — so the two are
+            # mutually exclusive, not just redundant.
+            if node.end and node.edges:
+                raise ValueError(
+                    f"Node '{node.name}' has end=true but also has outgoing edges "
+                    f"({', '.join(e.function for e in node.edges)}) — it would end the "
+                    "call before those edges could ever be reached."
+                )
+            functions = [e.function for e in node.edges]
+            dupes = {f for f in functions if functions.count(f) > 1}
+            if dupes:
+                raise ValueError(
+                    f"Node '{node.name}' has duplicate edge function name(s): "
+                    f"{', '.join(sorted(dupes))} — the model can't tell them apart."
+                )
 
     # ---- compilation -------------------------------------------------------
     def build_initial_node(self) -> NodeConfig:
@@ -80,6 +99,8 @@ class AgentBuilder:
             # Persist what the caller gave us so later nodes can use it.
             flow_manager.state.update(args)
             logger.info(f"[{edge.function}] -> {edge.target} | collected: {args}")
+            if self._on_transition:
+                self._on_transition(edge.function, edge.target, args)
             next_node = self._make_node(self._nodes_by_name[edge.target])
             return {"status": "success", **args}, next_node
 
