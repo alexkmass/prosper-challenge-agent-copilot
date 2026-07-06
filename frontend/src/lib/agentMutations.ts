@@ -103,8 +103,11 @@ export function addEdge(
     properties: {},
     required: [],
   }
+  // `end` and edges are mutually exclusive (AgentBuilder rejects a node with
+  // both) — a source node gaining its first edge can no longer be terminal.
   const next = updateNode(agent, sourceNode, {
     edges: [...(agent.nodes.find((n) => n.name === sourceNode)?.edges ?? []), edge],
+    end: false,
   })
   return { agent: next, function: edge.function }
 }
