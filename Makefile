@@ -16,8 +16,8 @@ install-nltk: ## Download NLTK punkt_tab data into backend/.nltk_data
 	mkdir -p $(PROJECT)/.nltk_data
 	NLTK_DATA=$(PROJECT)/.nltk_data uv run --directory $(PROJECT) python -c "import nltk; nltk.download('punkt_tab', download_dir='$(PROJECT)/.nltk_data', quiet=True)"
 
-run: ## Run the voice agent (then open http://localhost:7860/client)
-	uv run --directory $(PROJECT) python bot.py
+run: ## Run the voice agent, restarting on backend file changes (then open http://localhost:7860/client)
+	uv run --directory $(PROJECT) watchfiles --filter python "python bot.py" .
 
 dev-frontend: ## Run the React UI dev server (http://localhost:5173)
 	npm run dev --prefix frontend

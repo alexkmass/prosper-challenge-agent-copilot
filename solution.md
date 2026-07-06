@@ -2,7 +2,7 @@
 
 A voice agent builder (Phase 1) plus an Agent Copilot (Phase 2) that treats a voice agent's node
 graph the way a coding agent treats a codebase: it proposes a full replacement, you see a diff, you
-apply it or you don't. See [decisions.md](decisions.md) for the detailed tradeoff log this summarizes.
+apply it or you don't.
 
 ## What's built
 
@@ -15,9 +15,12 @@ apply it or you don't. See [decisions.md](decisions.md) for the detailed tradeof
 - Add nodes with a button; add edges by dragging a connection on the canvas (or from a node's
   inspector) — both open the edge inspector pre-filled, ready to describe the transition.
 - **Test call**: saves the current draft, marks it active, and opens Pipecat's prebuilt client in a
-  new tab. (An embedded iframe was tried first but reverted — see decisions.md — a Chrome
-  Permissions-Policy quirk made Pipecat's own client bundle believe microphone access was already
-  denied inside the iframe, so it never even asked. A new tab sidesteps that entirely.)
+  new tab. (An embedded iframe was tried first, but Pipecat's client checks the browser's microphone
+  permission state before deciding whether to prompt, and inside an iframe that check can report
+  "denied" even when the top-level page already has access — so it silently never asked, and the fix
+  lives inside Pipecat's bundled client, not this code. A new tab sidesteps it entirely.)
+- Nodes are draggable to rearrange the layout for clarity; positions live only in the browser (never
+  written to the saved agent) and reset when switching agents or via a **Reorder** button.
 - **Call log**: since the test call runs in its own tab with no shared state with the builder, a
   "Call log" panel (polling `GET /api/calls/log`) shows what the agent actually collected during the
   current or most recent call — every node visited, the edge function that got it there, and the
@@ -25,12 +28,16 @@ apply it or you don't. See [decisions.md](decisions.md) for the detailed tradeof
 
 **Phase 2 — Agent Copilot** (`backend/copilot.py`, a panel in the same UI)
 - **Build**: paste a client's natural-language guidelines → the Copilot designs a full node graph.
-- **Improve**: the Copilot scans a batch of (mocked) call transcripts against the current agent and
-  surfaces an **Issue Inbox** — each issue attributed to the specific node where the agent mishandled
-  the call, with the evidencing quote. Click an issue → the Copilot proposes a fix.
-- Both modes feed the same review step: the proposed agent is diffed against the current draft and
-  rendered on the canvas as a color overlay (green = added, amber = modified, red = removed), with a
-  plain-English change list in the side panel. Nothing is saved until you click **Apply**, then **Save**.
+  Generating always replaces the *entire* open agent — there's no partial merge — so if it already has
+  real content, this requires an explicit confirmation before the generation call is even made.
+- **Improve**: scans a batch of (mocked) call transcripts against the current agent automatically (no
+  manual click — requiring one would undercut the point of automating detection) and surfaces an
+  **Issue Inbox** — each issue attributed to the specific node where the agent mishandled the call,
+  with the evidencing quote. Click an issue → the Copilot proposes a fix.
+- Both modes feed the same review step: the proposed agent is diffed — client-side, not by the LLM,
+  so the diff can't misdescribe its own change — against the current draft and rendered on the canvas
+  as a color overlay (green = added, amber = modified, red = removed), with a plain-English change
+  list in the side panel. Nothing is saved until you click **Apply**, then **Save**.
 
 ## Architecture
 
@@ -52,11 +59,13 @@ frontend (Vite/React)  --/api-->  FastAPI (bot.py + api.py + copilot.py)
   WebRTC connection rather than once at process start. `bot.py` resolves the store's active agent
   *inside* `bot()`, so a save is live on the very next test call.
 - **The Copilot never talks to the store directly.** `copilot.py`'s three endpoints (`/build`,
-  `/audit`, `/fix`) each return a candidate `AgentConfig`, validated server-side with the same
-  `AgentBuilder` used for human saves (plus one extra check: no duplicate edge function names within
-  a node, which `AgentBuilder` doesn't catch but breaks the model's ability to disambiguate branches
-  at call time). The frontend computes the diff and owns the apply step — the LLM proposes, the human
-  disposes.
+  `/audit`, `/fix`) each return a candidate `AgentConfig`, validated server-side with the exact same
+  `AgentBuilder` check a human-edited save has to pass — including two rules added after real bugs
+  surfaced them: edge function names must be unique within a node (the LLM once emitted two
+  identically-named tools on one node, breaking its own ability to tell them apart), and a node with
+  `end: true` can't also have edges (this one crashed a real test call the instant it was reached,
+  since Pipecat ends the call the moment such a node is entered — not after the user responds). The
+  frontend owns the apply step — the LLM proposes, the human disposes.
 
 ## Why this Copilot design
 
@@ -81,10 +90,10 @@ scratch" and "here's what's broken, fix it" — not two different tools bolted t
   audit and fix themselves are live LLM calls every time — only the input calls are canned.
 - **No live fallback for the Copilot demo.** Every Build/Improve action is a real OpenAI call with no
   pre-baked backup if the API hiccups during a live review. Chosen for authenticity over safety net.
-- **No node position persistence / manual drag-to-arrange.** Layout is always recomputed from the
-  graph structure (BFS depth from the start node); positions are never written to the saved JSON.
-  Rearranging nodes by hand isn't in the requirements, and persisting `{x, y}` would put a UI concern
-  inside the contract the backend and the Copilot both read.
+- **No node position *persistence*.** Layout is always recomputed from the graph structure (BFS depth
+  from the start node) and manual drag positions live only in the browser — neither is ever written to
+  the saved agent JSON. Persisting `{x, y}` would put a UI concern inside the contract the backend and
+  the Copilot both read.
 - **No undo/redo, no multi-user/auth, no agent deletion from the picker, no streaming Copilot
   output.** None of these change whether the core problem — turning guidelines into an agent, and
   turning call issues into a fix — gets solved, and the review explicitly asked for a demo, not a

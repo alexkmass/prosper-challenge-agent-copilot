@@ -33,5 +33,9 @@ Thumbs.db
 .vscode/
 *.swp
 
-# ---- AI tooling (local dev-session config, not project config) ----
-.claude/
+# ---- AI tooling ----
+# Personal session config — not project config. Skills/commands under .claude/
+# ARE project config and should be committed, so these are listed individually
+# rather than ignoring .claude/ wholesale.
+.claude/settings.local.json
+.claude/launch.json

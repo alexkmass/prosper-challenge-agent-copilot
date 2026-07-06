@@ -22,6 +22,10 @@ dependencies = [
 dev = [
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.24,<1",
+    # Restarts `python bot.py` on file changes for `make run` (see Makefile).
+    # Already a transitive dep via uvicorn[standard], but declared explicitly
+    # since the Makefile invokes its CLI directly.
+    "watchfiles>=1.0,<2",
 ]
 
 [tool.uv]

@@ -1849,6 +1849,7 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "watchfiles" },
 ]
 
 [package.metadata]
@@ -1862,6 +1863,7 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = ">=8.3,<9" },
     { name = "pytest-asyncio", specifier = ">=0.24,<1" },
+    { name = "watchfiles", specifier = ">=1.0,<2" },
 ]
 
 [[package]]
