@@ -57,6 +57,8 @@ Edge:
   target: str                   # must name a node above
   properties: dict = {}         # JSON-schema properties for fields to collect on this edge
   required: list[str] = []      # which of `properties` must be filled before the edge fires
+  tool: str | None = None       # optional key into the tool registry, see agent-tools.md
+  tool_async: bool = False      # fire-and-forget `tool`, see agent-tools.md
 ```
 
 Unknown/missing optional fields default as shown; `name`/`initial_node`/`nodes` (on `AgentConfig`)
@@ -78,6 +80,15 @@ and `name`/`function`/`description`/`target` (on `Node`/`Edge`) are required key
   something a node author writes by hand.
 - `pre_actions` are passed through unchanged when present; omitted entirely when empty (not emitted
   as `[]`).
+- If an edge's `tool` is set, its handler awaits that tool's registry entry
+  (`handler(args, state)`, see [agent-tools.md](agent-tools.md)) before transitioning, and merges
+  the tool's result dict into both the function's return value and `flow_manager.state` alongside
+  the collected `args` — the edge still always transitions to its own `target`; only the result the
+  LLM sees changes.
+- Every compiled node whose `end` is `False` also gets two functions not present in
+  `AgentConfig` at all: `request_human_agent` and `confirm_human_transfer`, letting a caller
+  escalate to a human from anywhere in the graph. See [agent-tools.md](agent-tools.md) for their
+  behavior — they're a builder-level concern, not something an agent author ever edits.
 
 ### Validation rules
 
@@ -96,6 +107,16 @@ Enforced in `AgentBuilder._validate()`, run once at construction (`AgentBuilder(
   sharing a name means the LLM has no way to tell them apart when the model itself picks which tool
   to call; global uniqueness across different nodes is fine since only one node's tools are active at
   a time.
+- **FR-6**: an edge's `tool`, if set, must name a key in the tool registry (`TOOL_REGISTRY`, see
+  [agent-tools.md](agent-tools.md)) — an unknown key is rejected rather than surfacing as an error
+  only when the edge is actually called mid-conversation.
+- **FR-7**: no edge may use `request_human_agent` or `confirm_human_transfer` as its `function` —
+  these names are reserved for the two functions auto-injected into every non-terminal node (see
+  [agent-tools.md](agent-tools.md)) and a collision would break the model's ability to tell them
+  apart.
+- **FR-8**: an edge with `tool_async: true` but no `tool` is rejected — the flag only means
+  something alongside a tool (see [agent-tools.md](agent-tools.md) for what it changes about
+  execution; it has no effect on this schema's validation beyond requiring `tool`).
 
 ## Acceptance Criteria
 
@@ -109,6 +130,11 @@ All covered by `backend/tests/test_agent_builder.py` (fast, deterministic, no AP
 - [x] Two edges on the same node sharing a `function` name are rejected (FR-5).
 - [x] The initial node's compiled `functions` list matches its edges' function names exactly.
 - [x] A terminal node (`end: true`, no edges) compiles with `post_actions: [{"type": "end_conversation"}]` and an empty `functions` list.
+- [x] An edge with an unknown `tool` key is rejected (FR-6).
+- [x] An edge named `request_human_agent` or `confirm_human_transfer` is rejected (FR-7).
+- [x] An edge with `tool_async: true` and no `tool` is rejected (FR-8).
+- [x] A non-terminal node's compiled `functions` includes `request_human_agent` and
+      `confirm_human_transfer` in addition to its own edges; a terminal node's does not.
 
 ## Out of Scope / Deferred
 
@@ -121,5 +147,7 @@ All covered by `backend/tests/test_agent_builder.py` (fast, deterministic, no AP
 ## Related
 
 - Code: `backend/agent_builder/schema.py`, `backend/agent_builder/builder.py`
-- Tests: `backend/tests/test_agent_builder.py`
+- Tests: `backend/tests/test_agent_builder.py`, `backend/tests/test_tools.py`
 - Tradeoffs: [solution.md](../solution.md) — "Architecture" and "Why this Copilot design"
+- See also: [agent-tools.md](agent-tools.md) — the tool registry, global functions, and stores this
+  spec's `Edge.tool` field and auto-injected functions depend on.

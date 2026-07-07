@@ -1,6 +1,6 @@
 # Agent Copilot (Phase 2)
 
-**Status:** Implemented. Source of truth for `backend/copilot.py` and the frontend Copilot panel —
+**Status:** Implemented. Source of truth for `backend/routes/copilot.py` and the frontend Copilot panel —
 update this spec before changing either.
 
 ## Overview
@@ -26,7 +26,7 @@ and the user applies or discards it. Nothing the Copilot produces bypasses the s
 - Open-ended multi-turn chat editing of the graph. Each Build or Improve action is one generation,
   reviewed once — not a conversation that incrementally patches the graph.
 - Live call ingestion. Improve mode audits a fixed set of mocked transcripts
-  (`backend/mock_calls.json`), not a real call-recording pipeline.
+  (`backend/data/mock_calls.json`), not a real call-recording pipeline.
 - A canned/fallback response path for LLM failures during a live demo — every Copilot action is a
   real OpenAI call with no pre-baked backup.
 
@@ -71,7 +71,7 @@ and to prefer 4–10 nodes.
 ### Improve
 
 - **FR-4**: `GET /api/copilot/calls?agent_id=` → the mocked transcripts for that agent
-  (`backend/mock_calls.json`, filtered by `agent_id`). Each transcript: `id`, `agent_id`,
+  (`backend/data/mock_calls.json`, filtered by `agent_id`). Each transcript: `id`, `agent_id`,
   `caller_name`, `summary`, `transcript: [{speaker: "agent"|"caller", text}]`.
 - **FR-5**: `POST /api/copilot/audit {agent_id}` → `{issues: [Issue]}`, one LLM call per invocation
   covering **all** of that agent's mock transcripts at once (not one call per transcript). Each
@@ -128,7 +128,7 @@ browser verification:
 
 ## Related
 
-- Code: `backend/copilot.py`, `backend/mock_calls.json`, `frontend/src/components/Copilot*.tsx`,
+- Code: `backend/routes/copilot.py`, `backend/data/mock_calls.json`, `frontend/src/components/Copilot*.tsx`,
   `frontend/src/lib/agentDiff.ts`
 - Tests: `backend/tests/test_copilot.py`
 - Tradeoffs: [solution.md](../solution.md) — "Why this Copilot design" and "Architecture"

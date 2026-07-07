@@ -41,12 +41,12 @@ correctly) and the Copilot's build/audit/fix output. Nothing here drives real au
 | --- | --- |
 | `backend/bot.py` | The voice pipeline (WebRTC + ElevenLabs STT/TTS + OpenAI LLM). Resolves the store's *active* agent via `AgentBuilder` fresh on every connection and runs it — no graph logic lives here. |
 | `backend/agent_builder/` | All agent-building code. `schema.py` = the declarative `AgentConfig` / `Node` / `Edge` contract; `builder.py` = `AgentBuilder`, which loads + validates the JSON and compiles it into a Pipecat Flows graph. |
-| `backend/example_flow.json` / `example_flow2.json` | Two example agents **as data** — a linear clinic scheduler and a branched one (book/reschedule/cancel). Seed the store on startup; the Copilot generates/edits agents independently of these files. |
+| `backend/tools/` | The tool registry an edge can opt into (appointment booking, CRM, notifications) plus the global human-escalation/call-resilience behavior every agent gets automatically. See `specs/agent-tools.md`. |
+| `backend/routes/` | The three FastAPI routers mounted in `bot.py`: `agents.py` (`/api/agents`, `/api/calls/log`), `copilot.py` (`/api/copilot/*`), `tools.py` (`/api/tools/*` dev endpoints). |
+| `backend/data/` | Seed data as JSON: `example_flow.json` / `example_flow2.json` (two example agents — a linear clinic scheduler and a branched one) and `mock_calls.json` (transcripts the Copilot's Improve mode audits). The Copilot generates/edits agents independently of these files. |
 | `backend/store.py` | In-memory `AgentStore` (CRUD + active-agent pointer), seeded from the example flows. |
 | `backend/call_log.py` | In-memory record of the current/last test call (nodes visited, fields collected) — surfaced in the UI since the test call runs in its own tab. |
-| `backend/api.py` | `/api/agents` and `/api/calls/log` REST routes. |
-| `backend/copilot.py` | `/api/copilot/*` routes — build from guidelines, audit mock calls, propose a fix. |
-| `backend/mock_calls.json` | Mocked call transcripts the Copilot's Improve mode audits. |
-| `backend/tests/` | Unit tests (schema/compiler validation) and LLM eval tests (tool-calling accuracy, Copilot correctness). |
+| `backend/prompts.py` | The Copilot's design-rules prompt (`AGENT_DESIGN_RULES`), shared by Build and Fix. |
+| `backend/tests/` | Unit tests (schema/compiler + tool validation) and LLM eval tests (tool-calling accuracy, Copilot correctness). |
 | `frontend/` | The React + React Flow + shadcn/ui builder and Copilot panel. |
 | `specs/` | Per-feature specs — requirements, contracts, and acceptance criteria. Source of truth going forward. |

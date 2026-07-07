@@ -26,7 +26,7 @@ apply it or you don't.
   current or most recent call — every node visited, the edge function that got it there, and the
   accumulated fields (name, insurance status, member ID, etc.) across the whole conversation.
 
-**Phase 2 — Agent Copilot** (`backend/copilot.py`, a panel in the same UI)
+**Phase 2 — Agent Copilot** (`backend/routes/copilot.py`, a panel in the same UI)
 - **Build**: paste a client's natural-language guidelines → the Copilot designs a full node graph.
   Generating always replaces the *entire* open agent — there's no partial merge — so if it already has
   real content, this requires an explicit confirmation before the generation call is even made.
@@ -38,6 +38,31 @@ apply it or you don't.
   so the diff can't misdescribe its own change — against the current draft and rendered on the canvas
   as a color overlay (green = added, amber = modified, red = removed), with a plain-English change
   list in the side panel. Nothing is saved until you click **Apply**, then **Save**.
+
+**Tools** (`backend/tools/`, a registry an edge can opt into)
+- Edges can now do more than transition: an edge picks a **tool** from a fixed catalog — look up or
+  book an appointment slot, look up or create a CRM contact by name, or send a confirmation
+  text/email — and the tool's real result (e.g. `available_slots`, `crm_found`) is what the LLM sees
+  back, in the same turn, regardless of which node the edge lands on next.
+- A tool can also run **in the background** (`tool_async`, a per-edge checkbox): the call doesn't
+  wait for it, and its result only reaches `flow_manager.state` for a *later* tool handler to pick
+  up — never the LLM directly, since that turn already finished. This only makes sense for a pure
+  side effect (creating a CRM record, sending a text) that nothing in the same turn depends on;
+  a tool whose result shapes what's said next (looking up slots, checking the CRM) has to stay
+  synchronous. The **Prosper Scheduler (Branched)** example agent demonstrates this end to end:
+  it checks the CRM by name, then *asynchronously* creates the contact right after insurance is
+  verified — running concurrently while the conversation moves on to offering times — so that by
+  the time a slot is booked a couple of turns later, the booking already links to that CRM contact,
+  with the caller never waiting on any of it.
+- **Escalate to a human** and **call resilience** apply to every agent automatically, with no
+  authoring required: any non-terminal node gains a hidden "ask to speak to a human" pair of
+  functions (confirm once, then transfer + end the call), and a pipeline-level processor turns a
+  flaky STT/LLM/TTS request into a spoken "could you say that again?" instead of killing the call.
+- A CRM contact that wasn't created mid-call is created **after the call ends** as a fallback, from
+  whatever the caller gave (name, insurance id, phone, email) — a deterministic post-call step, not
+  another LLM turn.
+- See [agent-tools.md](specs/agent-tools.md) for the full registry, stores, the sync-vs-async
+  guidance, and the dev endpoints (`/api/tools/*`) used to verify tool activity manually.
 
 ## Architecture
 
@@ -83,7 +108,7 @@ scratch" and "here's what's broken, fix it" — not two different tools bolted t
 
 ## What's mocked, deferred, or cut, and why
 
-- **Call data is mocked** (`backend/mock_calls.json`, 4 transcripts) — explicitly permitted by the
+- **Call data is mocked** (`backend/data/mock_calls.json`, 4 transcripts) — explicitly permitted by the
   brief. Each transcript was written to expose a *different class* of real problem (a mid-flow intent
   switch with no escape edge, rigid options with no fallback, an out-of-scope question answered
   instead of deferred, a required field with no alternate lookup), not just cosmetic issues. The

@@ -14,7 +14,7 @@ from typing import Optional, Protocol
 
 from agent_builder import AgentBuilder
 
-FLOWS_DIR = Path(__file__).parent
+DATA_DIR = Path(__file__).parent / "data"
 
 
 class AgentNotFoundError(KeyError):
@@ -89,6 +89,6 @@ store = InMemoryAgentStore()
 
 # Seed with the two example flows so the UI has something to show on first run.
 for _stem in ("example_flow", "example_flow2"):
-    _path = FLOWS_DIR / f"{_stem}.json"
+    _path = DATA_DIR / f"{_stem}.json"
     if _path.exists():
         store.seed(_stem, json.loads(_path.read_text()))

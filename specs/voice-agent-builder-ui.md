@@ -29,7 +29,7 @@ raw JSON; every edit maps to a pure mutation of the same `AgentConfig` shape the
 ### Agent management
 
 Backed by `backend/store.py`'s `AgentStore` (in-memory, CRUD + one "active" pointer) via
-`backend/api.py`:
+`backend/routes/agents.py`:
 
 | Method & path | Purpose |
 | --- | --- |
@@ -56,6 +56,8 @@ Backed by `backend/store.py`'s `AgentStore` (in-memory, CRUD + one "active" poin
   when the user clicks **Reorder** — there is no other way for a position to persist.
 - **FR-5**: Hovering an edge visually raises it (thicker stroke, bolder label, drawn above whatever it
   overlaps) so overlapping edges/labels stay distinguishable without needing more canvas space.
+- **FR-5a**: An edge carrying a tool (see [agent-tools.md](agent-tools.md)) shows a small badge on
+  its label — no need to open the inspector just to see which edges do more than transition.
 
 ### Node editing
 
@@ -76,6 +78,10 @@ Backed by `backend/store.py`'s `AgentStore` (in-memory, CRUD + one "active" poin
 - **FR-10**: Selecting an edge opens an inspector to edit `function`, `target` (any other node in the
   agent), `description`, and a structured list of fields to collect (`name`, `type`
   `string`/`number`/`boolean`, `description`, `required`) — never raw JSON-schema editing.
+- **FR-10a**: The edge inspector also has a **Tool** picker (grouped by category, "No tool" as the
+  default) — see [agent-tools.md](agent-tools.md). Picking a tool prefills `function`,
+  `description`, and the collected-fields list from that tool's defaults, without overwriting
+  values already customized on the edge.
 - **FR-11**: Deleting an edge removes only that edge from its source node.
 
 ### Agent-level settings
@@ -143,5 +149,7 @@ Verified by manual browser testing:
 
 ## Related
 
-- Code: `frontend/src/**`, `backend/api.py`, `backend/store.py`, `backend/call_log.py`, `backend/bot.py`
+- Code: `frontend/src/**`, `backend/routes/agents.py`, `backend/store.py`, `backend/call_log.py`, `backend/bot.py`
+- See also: [agent-tools.md](agent-tools.md) — the tool catalog behind FR-10a, and the call
+  resilience processor added to `bot.py`'s pipeline.
 - Tradeoffs: [solution.md](../solution.md) — "What's built" and "What's mocked, deferred, or cut"

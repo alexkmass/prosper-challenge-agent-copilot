@@ -21,15 +21,16 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from agent_builder import AgentBuilder
 from agent_builder.schema import DEFAULT_MODEL, DEFAULT_VOICE_ID
+from prompts import AGENT_DESIGN_RULES
 from store import AgentNotFoundError, store
 
 router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 
-MOCK_CALLS_PATH = Path(__file__).parent / "mock_calls.json"
+MOCK_CALLS_PATH = Path(__file__).parent.parent / "data" / "mock_calls.json"
 COPILOT_MODEL = "gpt-4o-2024-08-06"
 
 
@@ -51,11 +52,18 @@ class EdgePropertyOut(BaseModel):
     required: bool
 
 
+ToolKey = Literal[
+    "appointment_lookup", "appointment_book", "crm_lookup", "crm_create", "send_sms", "send_email"
+]
+
+
 class EdgeOut(BaseModel):
     function: str
     description: str
     target: str
     collect: list[EdgePropertyOut]
+    tool: Optional[ToolKey] = None
+    tool_async: bool = False
 
 
 class NodeOut(BaseModel):
@@ -86,13 +94,18 @@ def _agent_config_to_dict(out: AgentConfigOut) -> dict:
             properties[p.name] = prop
             if p.required:
                 required.append(p.name)
-        return {
+        d = {
             "function": e.function,
             "description": e.description,
             "target": e.target,
             "properties": properties,
             "required": required,
         }
+        if e.tool:
+            d["tool"] = e.tool
+            if e.tool_async:
+                d["tool_async"] = True
+        return d
 
     def node_to_dict(n: NodeOut) -> dict:
         d = {
@@ -121,30 +134,6 @@ def _validate_generated_config(config: dict) -> None:
     human-edited save has to clear.
     """
     AgentBuilder.from_dict(config)
-
-
-AGENT_DESIGN_RULES = """
-You design voice AI agents for Prosper, a company that builds phone-call AI \
-agents for healthcare use cases (mainly appointment scheduling). An agent is \
-a graph of nodes; each node is one step of the conversation, and each edge is \
-a named function the LLM can call to transition to another node.
-
-Rules:
-- Every node needs a `task_message`: a short instruction for what the agent \
-  should say or do at that step. Replies are spoken aloud, so avoid anything \
-  that can't be read out (no lists, no emojis, no markdown).
-- A node with no outgoing edges MUST have `end` set to true (it ends the call). \
-  A node with edges MUST have `end` set to false.
-- `initial_node` must be the `name` of one of the nodes.
-- Every edge's `target` must be the `name` of another node in the graph.
-- Use `collect` on an edge only for information the caller actually needs to \
-  give (e.g. their name, a date) — most edges (simple routing) need none.
-- Every edge's `function` name must be unique within its node — this is how \
-  the model tells two branches apart at call time. Two edges on the same node \
-  must never share a function name, even if their targets differ.
-- Keep the graph as small as it can be while still covering the described \
-  cases. Prefer 4-10 nodes.
-"""
 
 
 # ---- Build: guidelines -> new agent ----------------------------------------

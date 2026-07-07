@@ -17,6 +17,10 @@ export interface AgentEdge {
   target: string
   properties?: Record<string, EdgeProperty>
   required?: string[]
+  /** Key into the backend tool registry (see lib/toolCatalog.ts + specs/agent-tools.md). */
+  tool?: string
+  /** Fire-and-forget: don't wait for `tool`'s result before continuing the call. */
+  tool_async?: boolean
 }
 
 export interface AgentNode {

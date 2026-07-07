@@ -59,7 +59,15 @@ def test_initial_node_exposes_its_edges_as_functions(scheduler_config):
     builder = AgentBuilder.from_dict(scheduler_config)
     node_config = builder.build_initial_node()
     function_names = {f.name for f in node_config["functions"]}
-    assert function_names == {"route_book", "route_reschedule", "route_cancel"}
+    # Non-terminal nodes also get the two global human-escalation functions —
+    # see test_tools.py for their dedicated coverage.
+    assert function_names == {
+        "route_book",
+        "route_reschedule",
+        "route_cancel",
+        "request_human_agent",
+        "confirm_human_transfer",
+    }
 
 
 def test_terminal_node_gets_end_conversation_action(scheduler_config):

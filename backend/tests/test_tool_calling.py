@@ -55,7 +55,11 @@ def test_offer_times_escalates_when_neither_slot_works(builder):
     calls = ask_node(
         builder, "offer_times", "Neither of those work for me at all — can I talk to a real person instead?"
     )
-    assert [c.function.name for c in calls] == ["escalate_no_availability"]
+    called = [c.function.name for c in calls]
+    # This phrasing also matches the globally-available "talk to a human" escalation
+    # (see specs/agent-tools.md) — the model may reasonably call both, but the
+    # domain-specific escalation (no slot works) must be among them.
+    assert "escalate_no_availability" in called
 
 
 def test_collect_details_extracts_name_and_reason(builder):
