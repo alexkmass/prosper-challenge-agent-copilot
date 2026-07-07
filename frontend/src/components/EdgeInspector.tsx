@@ -2,7 +2,8 @@ import { useMemo } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
 
 import type { AgentConfig, AgentEdge, EdgeProperty } from '../types/agent'
-import { TOOL_CATALOG, findTool, resolveToolPatch } from '../lib/toolCatalog'
+import { findTool, resolveToolPatch } from '../lib/toolCatalog'
+import { useToolCatalog } from '../hooks/useToolCatalog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -53,10 +54,11 @@ type EdgeInspectorProps = {
 }
 
 export function EdgeInspector({ agent, sourceNode, edge, onUpdate, onDelete }: EdgeInspectorProps) {
+  const toolCatalog = useToolCatalog()
   const rows = useMemo(() => toRows(edge), [edge])
   const targets = agent.nodes.filter((n) => n.name !== sourceNode)
-  const selectedTool = findTool(edge.tool)
-  const categories = useMemo(() => Array.from(new Set(TOOL_CATALOG.map((t) => t.category))), [])
+  const selectedTool = findTool(toolCatalog, edge.tool)
+  const categories = useMemo(() => Array.from(new Set(toolCatalog.map((t) => t.category))), [toolCatalog])
   const siblingFunctions = useMemo(
     () =>
       new Set(
@@ -79,7 +81,7 @@ export function EdgeInspector({ agent, sourceNode, edge, onUpdate, onDelete }: E
   }
 
   function handleToolChange(value: string) {
-    const patch = resolveToolPatch(edge, value === NO_TOOL_VALUE ? null : value)
+    const patch = resolveToolPatch(toolCatalog, edge, value === NO_TOOL_VALUE ? null : value)
     if (patch.function) patch.function = uniqueFunctionName(patch.function)
     onUpdate(patch)
   }
@@ -107,7 +109,7 @@ export function EdgeInspector({ agent, sourceNode, edge, onUpdate, onDelete }: E
             {categories.map((category) => (
               <SelectGroup key={category}>
                 <SelectLabel>{category}</SelectLabel>
-                {TOOL_CATALOG.filter((t) => t.category === category).map((t) => (
+                {toolCatalog.filter((t) => t.category === category).map((t) => (
                   <SelectItem key={t.key} value={t.key}>
                     {t.label}
                   </SelectItem>

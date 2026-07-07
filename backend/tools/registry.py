@@ -1,9 +1,8 @@
 #
 # TOOL_REGISTRY — the catalog of edge-level tools. AgentBuilder validates
 # Edge.tool against this dict's keys and, when set, awaits the tool's handler
-# before transitioning (see agent_builder/builder.py). The frontend's
-# lib/toolCatalog.ts is a hand-kept UI mirror of the same 5 entries (same
-# pattern as types/agent.ts mirroring schema.py).
+# before transitioning (see agent_builder/builder.py). The frontend loads the
+# same catalog from GET /api/tools/catalog.
 #
 
 from dataclasses import dataclass, field
@@ -139,3 +138,19 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
         handler=handlers.send_email,
     ),
 }
+
+
+def tool_catalog() -> list[dict]:
+    """UI + Copilot catalog — single serialization of TOOL_REGISTRY."""
+    return [
+        {
+            "key": spec.key,
+            "label": spec.label,
+            "category": spec.category,
+            "default_function": spec.default_function,
+            "default_description": spec.default_description,
+            "default_properties": spec.default_properties,
+            "default_required": list(spec.default_required),
+        }
+        for spec in sorted(TOOL_REGISTRY.values(), key=lambda s: s.key)
+    ]

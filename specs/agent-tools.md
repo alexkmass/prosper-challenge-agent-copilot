@@ -51,7 +51,8 @@ so it's ready to link into the booking a couple of turns later).
 
 ### Tool registry (edge-level tools)
 
-`backend/tools/registry.py` exposes `TOOL_REGISTRY: dict[str, ToolSpec]`. Each `ToolSpec` carries a
+`backend/tools/registry.py` exposes `TOOL_REGISTRY: dict[str, ToolSpec]` and `tool_catalog()`,
+which serializes the registry for API/UI/Copilot consumers. Each `ToolSpec` carries a
 `key`, a UI `label`/`category`, suggested `default_function`/`default_description`/
 `default_properties`/`default_required` (used to prefill an edge when the tool is picked in the
 UI), and a `handler(args: dict, state: dict) -> dict` coroutine.
@@ -190,6 +191,7 @@ frontend panel:
 
 | Method & path | Purpose |
 | --- | --- |
+| `GET /api/tools/catalog` | Edge-tool metadata for the UI picker and Copilot chat (`tool_catalog()`) |
 | `GET /api/tools/slots` | Available slots (optional `service`, `date` query params) |
 | `GET /api/tools/bookings` | All bookings made so far |
 | `GET /api/tools/crm` | All CRM contacts (seeded + auto-created) |
@@ -201,11 +203,12 @@ frontend panel:
 ### Editing tools into the graph (UI)
 
 - **FR-14**: The edge inspector (see [voice-agent-builder-ui.md](voice-agent-builder-ui.md)) exposes
-  a **Tool** picker, grouped by category, with "No tool" as the default. Picking a tool prefills the
-  edge's `function`, `description`, and collected fields from that tool's defaults — via
-  `frontend/src/lib/toolCatalog.ts`, a hand-kept mirror of `TOOL_REGISTRY`'s UI-facing metadata,
-  the same way `frontend/src/types/agent.ts` mirrors `schema.py` — without clobbering any values
-  the human already customized on that edge. Picking a tool always resets `tool_async` to `false`.
+  a **Tool** picker, grouped by category, with "No tool" as the default. The catalog is loaded once
+  on app mount from `GET /api/tools/catalog` (`ToolCatalogProvider` → `useToolCatalog()`); if the
+  fetch fails, the picker degrades to an empty list (save validation still runs server-side).
+  Picking a tool prefills the edge's `function`, `description`, and collected fields from that tool's
+  defaults — via `frontend/src/lib/toolCatalog.ts` (types + `resolveToolPatch` helpers only; no
+  duplicated tool list). Picking a tool always resets `tool_async` to `false`.
 - **FR-15**: Once a tool is picked, a **"Run in the background"** checkbox appears, bound directly
   to `tool_async` — no separate tool selection for it, since it's a property of *how* the edge's own
   tool runs, not a different tool.
@@ -219,12 +222,14 @@ frontend panel:
 
 ### Copilot integration
 
-- **FR-17**: `EdgeOut` (Build/Fix's structured-output shape, see
+- **FR-17**: `EdgeOut` (Build/Fix/Improve's structured-output shape, see
   [agent-copilot.md](agent-copilot.md)) carries an optional `tool` field constrained to the 6
   registry keys, and a `tool_async` bool, both passed through unchanged into the schema's
-  `Edge.tool`/`Edge.tool_async`. `AGENT_DESIGN_RULES` documents when to use each tool, when
-  `tool_async` is (and isn't) appropriate, and states that human-escalation and call-resilience are
-  automatic and must never be modeled as nodes/edges by the Copilot.
+  `Edge.tool`/`Edge.tool_async`. Every `/chat` turn injects `available_tools: tool_catalog()` into
+  the model's context JSON so replies and briefs only name real tool keys.
+  `AGENT_DESIGN_RULES` documents when to use each tool, when `tool_async` is (and isn't)
+  appropriate, forbids self-loops and invented tool names, and states that human-escalation and
+  call-resilience are automatic and must never be modeled as nodes/edges by the Copilot.
 
 ### Worked example: Prosper Scheduler (Branched)
 
@@ -319,5 +324,6 @@ Manual/browser:
   `backend/agent_builder/builder.py`, `backend/bot.py`, `backend/data/example_flow2.json`,
   `frontend/src/lib/toolCatalog.ts`, `frontend/src/components/EdgeInspector.tsx`,
   `frontend/src/components/AgentEdge.tsx`, `frontend/src/lib/agentGraph.ts`
-- Tests: `backend/tests/test_tools.py`, `backend/tests/test_tool_calling.py`
+- Tests: `backend/tests/test_tools.py`, `backend/tests/test_tool_catalog.py`,
+  `backend/tests/test_tool_calling.py`
 - Tradeoffs: [solution.md](../solution.md)

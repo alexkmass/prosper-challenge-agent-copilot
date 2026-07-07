@@ -25,8 +25,10 @@ all produce or consume the exact same shape. There is no separate "AI format."
 - Runtime mutation of the graph mid-call. A call always runs whichever `AgentConfig` was active at
   connection time (see [voice-agent-builder-ui.md](voice-agent-builder-ui.md) for how "active" is
   resolved).
-- Semantic/quality validation (tone consistency, whether a task message is well-written). That's a
-  Copilot concern (see [agent-copilot.md](agent-copilot.md)), not the schema's.
+- Semantic/quality validation (tone consistency, whether a task message is well-written,
+  missing caller intents). The **Validate** feature's LLM design-review layer handles that
+  (see [agent-copilot.md](agent-copilot.md)); this spec covers only the structural contract and
+  compile-time rules.
 - Node position/layout data. Never part of this contract — layout is a UI-only, in-memory concern.
 
 ## Requirements
@@ -92,9 +94,13 @@ and `name`/`function`/`description`/`target` (on `Node`/`Edge`) are required key
 
 ### Validation rules
 
-Enforced in `AgentBuilder._validate()`, run once at construction (`AgentBuilder(config)` /
-`.from_dict()` / `.from_json()`) — a bad agent never reaches the point of compiling a node:
+Enforced in `backend/agent_builder/validation.py`'s `validate_agent()` — a single source of truth
+for every structural check. `AgentBuilder._validate()` filters that list to `severity == "error"`
+and raises on the first one, so a bad agent never reaches the point of compiling a node. The Validate
+feature (`POST /api/copilot/validate`, see [agent-copilot.md](agent-copilot.md)) returns the full
+list — errors *and* warnings — plus an LLM design-review pass on top.
 
+Compile-time **errors** (also block save and generation):
 - **FR-1**: the agent must have at least one node.
 - **FR-2**: `initial_node` must name a node that exists.
 - **FR-3**: every edge's `target` must name a node that exists (no dangling transitions).
@@ -118,6 +124,14 @@ Enforced in `AgentBuilder._validate()`, run once at construction (`AgentBuilder(
   something alongside a tool (see [agent-tools.md](agent-tools.md) for what it changes about
   execution; it has no effect on this schema's validation beyond requiring `tool`).
 
+**Warnings** (reported by Validate and `validate_agent()`, but do not block compile/save):
+
+- Self-loop edges (`target` names the same node the edge leaves).
+- Unreachable nodes, dead-end non-terminal nodes, no reachable terminal node, start node that is
+  terminal, empty task messages, required collect fields not declared in `properties`.
+
+Self-loops are intentionally warnings, not compile errors — a self-loop graph can still run, but it
+is almost always a design mistake; Copilot prompts forbid them and Validate flags them.
 ## Acceptance Criteria
 
 All covered by `backend/tests/test_agent_builder.py` (fast, deterministic, no API calls):
@@ -146,8 +160,10 @@ All covered by `backend/tests/test_agent_builder.py` (fast, deterministic, no AP
 
 ## Related
 
-- Code: `backend/agent_builder/schema.py`, `backend/agent_builder/builder.py`
-- Tests: `backend/tests/test_agent_builder.py`, `backend/tests/test_tools.py`
+- Code: `backend/agent_builder/schema.py`, `backend/agent_builder/builder.py`,
+  `backend/agent_builder/validation.py`
+- Tests: `backend/tests/test_agent_builder.py`, `backend/tests/test_validation.py`,
+  `backend/tests/test_tools.py`
 - Tradeoffs: [solution.md](../solution.md) — "Architecture" and "Why this Copilot design"
 - See also: [agent-tools.md](agent-tools.md) — the tool registry, global functions, and stores this
   spec's `Edge.tool` field and auto-injected functions depend on.

@@ -1,7 +1,6 @@
 /**
- * Hand-kept UI mirror of backend/tools/registry.py's TOOL_REGISTRY — same
- * pattern as types/agent.ts mirroring schema.py. Drives the edge inspector's
- * Tool picker (see specs/agent-tools.md).
+ * Types and helpers for the edge-tool catalog served by GET /api/tools/catalog
+ * (source of truth: backend/tools/registry.py).
  */
 import type { AgentEdge, EdgeProperty } from '../types/agent'
 
@@ -15,100 +14,45 @@ export interface ToolCatalogEntry {
   defaultRequired: string[]
 }
 
-export const TOOL_CATALOG: ToolCatalogEntry[] = [
-  {
-    key: 'appointment_lookup',
-    label: 'Look up available appointment slots',
-    category: 'Appointments',
-    defaultFunction: 'find_available_slots',
-    defaultDescription:
-      'Call this when the caller wants to know what appointment times are open, optionally for a specific service or date.',
-    defaultProperties: {
-      service: { type: 'string', description: 'The service requested, e.g. general_checkup or dental_cleaning.' },
-      date: { type: 'string', description: 'Preferred date (YYYY-MM-DD), if the caller mentioned one.' },
-    },
-    defaultRequired: [],
-  },
-  {
-    key: 'appointment_book',
-    label: 'Book an appointment slot',
-    category: 'Appointments',
-    defaultFunction: 'book_appointment',
-    defaultDescription: 'Call this once the caller has picked a specific available slot to book.',
-    defaultProperties: {
-      slot_id: { type: 'string', description: 'The id of the slot the caller chose.' },
-      caller_name: { type: 'string', description: "The caller's full name for the booking." },
-      phone_number: { type: 'string', description: "Caller's phone number, for confirmation/reminder texts." },
-      email: { type: 'string', description: "Caller's email, for confirmation/reminder emails." },
-    },
-    defaultRequired: ['slot_id', 'caller_name'],
-  },
-  {
-    key: 'crm_lookup',
-    label: 'Look up caller in CRM',
-    category: 'CRM',
-    defaultFunction: 'lookup_crm_contact',
-    defaultDescription:
-      "Call this as soon as you have the caller's first and last name, to check whether they're an existing contact.",
-    defaultProperties: {
-      first_name: { type: 'string', description: "Caller's first name." },
-      last_name: { type: 'string', description: "Caller's last name." },
-    },
-    defaultRequired: ['first_name', 'last_name'],
-  },
-  {
-    key: 'crm_create',
-    label: 'Create caller in CRM',
-    category: 'CRM',
-    defaultFunction: 'create_crm_contact',
-    defaultDescription:
-      "Call this once you have the caller's name and insurance details, to create (or reuse) their CRM record.",
-    defaultProperties: {
-      first_name: { type: 'string', description: "Caller's first name." },
-      last_name: { type: 'string', description: "Caller's last name." },
-      insurance_id: { type: 'string', description: 'Insurance member id, if given.' },
-      phone_number: { type: 'string', description: "Caller's phone number, if given." },
-      email: { type: 'string', description: "Caller's email, if given." },
-    },
-    defaultRequired: ['first_name', 'last_name'],
-  },
-  {
-    key: 'send_sms',
-    label: 'Send confirmation text',
-    category: 'Notifications',
-    defaultFunction: 'send_confirmation_sms',
-    defaultDescription: 'Call this to text the caller a confirmation or summary of what was just arranged.',
-    defaultProperties: {
-      phone_number: { type: 'string', description: 'Where to send the text, if not already known.' },
-      message: { type: 'string', description: 'The text message body.' },
-    },
-    defaultRequired: ['message'],
-  },
-  {
-    key: 'send_email',
-    label: 'Send confirmation email',
-    category: 'Notifications',
-    defaultFunction: 'send_confirmation_email',
-    defaultDescription: 'Call this to email the caller a confirmation or summary of what was just arranged.',
-    defaultProperties: {
-      email: { type: 'string', description: 'Where to send the email, if not already known.' },
-      subject: { type: 'string', description: 'The email subject line.' },
-      message: { type: 'string', description: 'The email body.' },
-    },
-    defaultRequired: ['subject', 'message'],
-  },
-]
+type ToolCatalogEntryApi = {
+  key: string
+  label: string
+  category: string
+  default_function: string
+  default_description: string
+  default_properties: Record<string, EdgeProperty>
+  default_required: string[]
+}
 
-export function findTool(key: string | undefined): ToolCatalogEntry | undefined {
-  return TOOL_CATALOG.find((t) => t.key === key)
+export function mapToolCatalog(entries: ToolCatalogEntryApi[]): ToolCatalogEntry[] {
+  return entries.map((entry) => ({
+    key: entry.key,
+    label: entry.label,
+    category: entry.category,
+    defaultFunction: entry.default_function,
+    defaultDescription: entry.default_description,
+    defaultProperties: entry.default_properties,
+    defaultRequired: entry.default_required,
+  }))
+}
+
+export function findTool(
+  catalog: ToolCatalogEntry[],
+  key: string | undefined,
+): ToolCatalogEntry | undefined {
+  return catalog.find((t) => t.key === key)
 }
 
 const FRESH_FUNCTION_NAME = /^go_next(_\d+)?$/
 
 /** Prefills an edge from a tool's defaults without clobbering values already customized. */
-export function resolveToolPatch(edge: AgentEdge, toolKey: string | null): Partial<AgentEdge> {
+export function resolveToolPatch(
+  catalog: ToolCatalogEntry[],
+  edge: AgentEdge,
+  toolKey: string | null,
+): Partial<AgentEdge> {
   if (!toolKey) return { tool: undefined, tool_async: false }
-  const tool = findTool(toolKey)
+  const tool = findTool(catalog, toolKey)
   if (!tool) return { tool: toolKey, tool_async: false }
   return {
     tool: toolKey,

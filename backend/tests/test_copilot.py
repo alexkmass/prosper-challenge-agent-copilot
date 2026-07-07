@@ -10,7 +10,19 @@ how to run/skip these.
 import pytest
 
 from agent_builder import AgentBuilder
-from routes.copilot import AuditRequest, BuildRequest, FixRequest, audit_calls, build_agent, fix_issue
+from routes.copilot import (
+    AuditRequest,
+    BuildRequest,
+    ChatMessage,
+    ChatRequest,
+    FixRequest,
+    ImproveRequest,
+    audit_calls,
+    build_agent,
+    copilot_chat,
+    fix_issue,
+    improve_agent,
+)
 
 pytestmark = pytest.mark.llm
 
@@ -29,6 +41,56 @@ async def test_build_produces_a_valid_multi_node_agent():
     AgentBuilder.from_dict(config)  # raises if invalid; the assertion is that it doesn't
     assert len(config["nodes"]) > 1
     assert any(n["name"] == config["initial_node"] for n in config["nodes"])
+    # Generation now also narrates what it produced.
+    assert result["explanation"].strip()
+
+
+async def test_chat_build_refines_a_brief_and_reaches_ready():
+    # A clear, complete request over two turns should leave the model with
+    # nothing left to ask — it refines a brief and, once told to go ahead,
+    # signals ready with a plan of what it will build.
+    result = await copilot_chat(
+        ChatRequest(
+            mode="build",
+            messages=[
+                ChatMessage(
+                    role="user",
+                    content=(
+                        "Build a scheduling agent for a dental clinic. Callers can book a "
+                        "cleaning or cancel an existing appointment. Offer Monday 9am or "
+                        "Thursday 3pm. That's the whole scope — please proceed."
+                    ),
+                )
+            ],
+            agent_id=None,
+        )
+    )
+    assert result["reply"].strip()
+    assert result["brief"].strip()
+    if result["ready"]:
+        assert result["plan"]  # a ready brief comes with a what-will-happen plan
+
+
+async def test_improve_from_free_text_adds_a_reschedule_path(scheduler_config):
+    # The Improve counterpart to Build: a free-text request against the branched
+    # scheduler should produce a valid agent that actually grows a path.
+    result = await improve_agent(
+        ImproveRequest(
+            agent_id="example_flow2",
+            brief=(
+                "Let callers reschedule an existing appointment to a different time, not "
+                "just book a new one or cancel."
+            ),
+        )
+    )
+    config = result["config"]
+    AgentBuilder.from_dict(config)  # raises if invalid
+    assert result["explanation"].strip()
+
+    # A real change: either a new node, or a new edge somewhere in the graph.
+    original_edge_count = sum(len(n.get("edges", [])) for n in scheduler_config["nodes"])
+    new_edge_count = sum(len(n.get("edges", [])) for n in config["nodes"])
+    assert len(config["nodes"]) > len(scheduler_config["nodes"]) or new_edge_count > original_edge_count
 
 
 async def test_audit_finds_the_seeded_issues_with_correct_node_attribution():

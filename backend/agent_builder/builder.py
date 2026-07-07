@@ -17,10 +17,11 @@ from typing import Callable, Optional, Union
 from loguru import logger
 from pipecat_flows import FlowManager, FlowsFunctionSchema, NodeConfig
 
-from tools.human_handoff import RESERVED_FUNCTION_NAMES, global_functions
+from tools.human_handoff import global_functions
 from tools.registry import TOOL_REGISTRY
 
 from .schema import AgentConfig, Edge, Node
+from .validation import validate_agent
 
 OnTransition = Callable[[str, str, dict], None]  # (function, target, collected) -> None
 
@@ -47,54 +48,12 @@ class AgentBuilder:
 
     # ---- validation --------------------------------------------------------
     def _validate(self) -> None:
-        names = set(self._nodes_by_name)
-        if not names:
-            raise ValueError("Agent has no nodes.")
-        if self.config.initial_node not in names:
-            raise ValueError(
-                f"initial_node '{self.config.initial_node}' is not a defined node."
-            )
-        for node in self.config.nodes:
-            for edge in node.edges:
-                if edge.target not in names:
-                    raise ValueError(
-                        f"Edge '{edge.function}' in node '{node.name}' targets "
-                        f"unknown node '{edge.target}'."
-                    )
-            # A terminal node ends the call the moment it's entered (see _make_node),
-            # before any of its own edges could ever be taken — so the two are
-            # mutually exclusive, not just redundant.
-            if node.end and node.edges:
-                raise ValueError(
-                    f"Node '{node.name}' has end=true but also has outgoing edges "
-                    f"({', '.join(e.function for e in node.edges)}) — it would end the "
-                    "call before those edges could ever be reached."
-                )
-            functions = [e.function for e in node.edges]
-            dupes = {f for f in functions if functions.count(f) > 1}
-            if dupes:
-                raise ValueError(
-                    f"Node '{node.name}' has duplicate edge function name(s): "
-                    f"{', '.join(sorted(dupes))} — the model can't tell them apart."
-                )
-            reserved = RESERVED_FUNCTION_NAMES & set(functions)
-            if reserved:
-                raise ValueError(
-                    f"Node '{node.name}' uses reserved function name(s): "
-                    f"{', '.join(sorted(reserved))} — these are auto-provided on every "
-                    "non-terminal node for human escalation."
-                )
-            for edge in node.edges:
-                if edge.tool is not None and edge.tool not in TOOL_REGISTRY:
-                    raise ValueError(
-                        f"Edge '{edge.function}' in node '{node.name}' names unknown tool "
-                        f"'{edge.tool}' — must be one of {sorted(TOOL_REGISTRY)}."
-                    )
-                if edge.tool_async and edge.tool is None:
-                    raise ValueError(
-                        f"Edge '{edge.function}' in node '{node.name}' sets tool_async but "
-                        "has no tool — tool_async is meaningless without one."
-                    )
+        # Shared with the Validate feature (see agent_builder/validation.py): that
+        # returns every finding without raising; the compiler only cares about the
+        # errors and refuses to build if there are any, keeping one rule set.
+        errors = [f for f in validate_agent(self.config) if f.severity == "error"]
+        if errors:
+            raise ValueError(errors[0].detail)
 
     # ---- compilation -------------------------------------------------------
     def build_initial_node(self) -> NodeConfig:

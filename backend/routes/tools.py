@@ -11,9 +11,16 @@ from fastapi import APIRouter, HTTPException
 from tools.booking_store import booking_store
 from tools.crm_store import crm_store
 from tools.notifications import email_sender, sms_sender
+from tools.registry import tool_catalog
 from tools.scheduler import reminder_scheduler
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
+
+
+@router.get("/catalog")
+async def get_tool_catalog():
+    """Edge-tool metadata for the builder UI and Copilot context."""
+    return tool_catalog()
 
 
 @router.get("/slots")
