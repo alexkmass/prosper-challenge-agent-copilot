@@ -1,5 +1,5 @@
 import type { AgentConfig } from '../types/agent'
-import type { CallLogSnapshot } from '../types/callLog'
+import type { CallRecord, CallSummary } from '../types/callLog'
 import type { Issue, MockCall } from '../types/copilot'
 
 export type AgentSummary = {
@@ -71,6 +71,10 @@ export function copilotFix(agentId: string, issue: Issue): Promise<{ config: Age
 
 // ---- calls --------------------------------------------------------------
 
-export function getCallLog(): Promise<CallLogSnapshot> {
-  return request('/api/calls/log')
+export function listCalls(): Promise<CallSummary[]> {
+  return request('/api/calls')
+}
+
+export function getCall(callId: string): Promise<CallRecord> {
+  return request(`/api/calls/${callId}`)
 }

@@ -122,8 +122,9 @@ UI), and a `handler(args: dict, state: dict) -> dict` coroutine.
   unconditionally even on a node a prior `crm_lookup` already ran on.
 - **FR-9**: Creating a contact that was never explicitly created mid-call is **also** available as a
   fallback that isn't a tool call at all — it happens once the call ends, if nothing already did it.
-  `bot.py`'s `on_client_disconnected` inspects `call_log.snapshot()["state"]` (the same accumulator
-  the Call Log panel reads, see [voice-agent-builder-ui.md](voice-agent-builder-ui.md)); if
+  `bot.py`'s `finally` block after `await runner.run()` (same place that calls `call_store.end_call`,
+  see FR-16 in [voice-agent-builder-ui.md](voice-agent-builder-ui.md)) inspects
+  `call_store.get(call_id)["state"]` — the same accumulator the Call Log panel reads; if
   `crm_found` is `False`, no `crm_contact_id` is already in state (meaning a `crm_create` edge
   didn't already handle it), and a name was collected, it calls `crm_store.create_contact(...)`
   with whatever of `insurance_id`/`phone_number`/`email` is present. No LLM or tool involvement in

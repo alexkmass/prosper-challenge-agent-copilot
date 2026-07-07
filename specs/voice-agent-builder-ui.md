@@ -108,14 +108,48 @@ Backed by `backend/store.py`'s `AgentStore` (in-memory, CRUD + one "active" poin
 
 ### Call log
 
+Backed by `backend/call_store.py`'s `CallStore` (in-memory, same seam-behind-an-interface pattern as
+`AgentStore` — a real database can replace `InMemoryCallStore` later without touching
+`routes/agents.py`, `bot.py`, or `call_recorder.py`) via `backend/routes/agents.py`:
+
+| Method & path | Purpose |
+| --- | --- |
+| `GET /api/calls` | List every call this session as a summary (id, agent, caller name if collected, status, timing, message/error counts), most recent first |
+| `GET /api/calls/{id}` | One call in full: node path, collected state, transcript, and stats |
+| `GET /api/calls/active` | The id of the call currently in progress, if any |
+
 - **FR-15**: Because the test call runs in a separate tab with no shared state, a "Call log" panel
-  polls `GET /api/calls/log` (every 2s while open) and shows: the ordered list of nodes visited, which
-  edge function led to each (`null` for the first/initial node), the fields collected at that step,
-  and an accumulated `state` dict merging everything collected across the whole call.
-- **FR-16**: `call_log.start(initial_node)` is called on `on_client_connected`, seeding the visit list
-  with the initial node; `call_log.end()` is called on `on_client_disconnected`, marking `active:
-  false` without clearing history. A new call (`start()` again) always resets history — only the
-  current/most recent call's data is ever available, not a multi-call history.
+  polls `GET /api/calls` (every 2s while open) for the list, and `GET /api/calls/{id}` for whichever
+  call is selected (every 1.5s while that call is still active, to show its transcript and stats
+  growing live). The panel is a list/detail split: the list shows every call this session, not just
+  the latest; selecting one shows three tabs — **Transcript** (caller/agent turns in order),
+  **Path & data** (the ordered list of nodes visited, which edge function led to each, the fields
+  collected at that step, and an accumulated `state` dict merging everything collected across the
+  call), and **Stats** (below).
+- **FR-16**: `call_store.start_call(agent_id, agent_name, initial_node)` is called on
+  `on_client_connected`, creating a new call record and seeding its visit list with the initial node.
+  `on_client_disconnected` only cancels the pipeline worker; `call_store.end_call(call_id)` runs in a
+  `finally` block after `await runner.run()`, so cleanup fires whether the call ended cleanly, the
+  connection dropped, or the pipeline hit an idle timeout — not only when the disconnect handler
+  fires. Unlike the single-call `CallLog` this replaced, starting a new call does not discard the
+  previous one — every call from the session is kept (bounded to the most recent 200) and browsable.
+- **FR-17**: `backend/call_recorder.py`'s `CallRecorderObserver` is attached to the `PipelineWorker`
+  via `observers=[...]` (a pure Pipecat `BaseObserver`, not a `FrameProcessor` — it only reads frames
+  flowing through the pipeline, so it can't alter or drop them, and it composes cleanly alongside
+  `CallResilienceProcessor`, which *is* a `FrameProcessor` sitting in the pipeline). It mirrors into
+  the active call:
+  - **Transcript**: one entry per finalized `TranscriptionFrame` (caller) and one entry per
+    `LLMFullResponseStartFrame`..`LLMFullResponseEndFrame` span, concatenating the `LLMTextFrame`s in
+    between (agent) — chosen over per-TTS-sentence chunks so one LLM turn is one message.
+  - **Stats**: `MetricsFrame`s (emitted because `bot.py` already sets
+    `PipelineParams(enable_metrics=True, enable_usage_metrics=True)`) are bucketed into `llm`/`stt`/
+    `tts` by matching the emitting processor's class name, and split by metric type — TTFB,
+    processing time, LLM token usage, TTS character count. `backend/call_store.py`'s
+    `summarize_stats()` rolls the raw per-event list up into per-bucket aggregates (call count, avg
+    TTFB, total processing time, total tokens/characters) for the UI.
+  - **Errors**: every `ErrorFrame` (both recoverable — swallowed by `CallResilienceProcessor` — and
+    fatal) is recorded with its message and origin processor, since the observer sees frames
+    regardless of whether a downstream processor later drops them.
 
 ## Acceptance Criteria
 
@@ -135,8 +169,14 @@ Verified by manual browser testing:
 - [x] The Call Log panel shows an accurate path + collected fields for a simulated call exercising
       three nodes (verified directly against `AgentBuilder`'s handlers).
 - [x] Requesting the call log before any backend restart / before any call has happened shows an
-      explicit "no test call yet" state, and a genuine backend-unreachable error is shown distinctly
+      explicit "no test calls yet" state, and a genuine backend-unreachable error is shown distinctly
       from that empty state.
+- [x] Multiple calls in the same session all remain browsable afterward (starting a new call does not
+      discard the previous one), most recent first, with the in-progress call clearly marked live and
+      its detail view refreshing while active.
+- [x] The Stats tab shows total call time, message count, error count, and per-service (LLM/STT/TTS)
+      call counts, avg TTFB, total processing time, and token/character usage, verified against a
+      seeded call with known metric values (`backend/tests/test_call_store.py`).
 
 ## Out of Scope / Deferred
 
@@ -149,7 +189,8 @@ Verified by manual browser testing:
 
 ## Related
 
-- Code: `frontend/src/**`, `backend/routes/agents.py`, `backend/store.py`, `backend/call_log.py`, `backend/bot.py`
+- Code: `frontend/src/**`, `backend/routes/agents.py`, `backend/store.py`, `backend/call_store.py`,
+  `backend/call_recorder.py`, `backend/bot.py`
 - See also: [agent-tools.md](agent-tools.md) — the tool catalog behind FR-10a, and the call
   resilience processor added to `bot.py`'s pipeline.
 - Tradeoffs: [solution.md](../solution.md) — "What's built" and "What's mocked, deferred, or cut"

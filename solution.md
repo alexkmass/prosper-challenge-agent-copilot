@@ -22,9 +22,14 @@ apply it or you don't.
 - Nodes are draggable to rearrange the layout for clarity; positions live only in the browser (never
   written to the saved agent) and reset when switching agents or via a **Reorder** button.
 - **Call log**: since the test call runs in its own tab with no shared state with the builder, a
-  "Call log" panel (polling `GET /api/calls/log`) shows what the agent actually collected during the
-  current or most recent call — every node visited, the edge function that got it there, and the
-  accumulated fields (name, insurance status, member ID, etc.) across the whole conversation.
+  "Call log" panel (polling `GET /api/calls`, then `GET /api/calls/{id}` for whichever call is
+  selected) lists every test call this session — not just the latest — and shows, per call: the
+  transcript (caller/agent turns), every node visited and the edge function that got it there, the
+  accumulated fields collected (name, insurance status, member ID, etc.), and performance stats —
+  total call time, message/error counts, and per-service (LLM/STT/TTS) call counts, avg TTFB, total
+  processing time, and token/character usage, captured by a `BaseObserver` watching the pipeline's
+  own transcription/LLM/metrics/error frames. Backed by an in-memory `CallStore`
+  (`backend/call_store.py`) behind the same swap-in-a-real-database interface as the agent store.
 
 **Phase 2 — Agent Copilot** (`backend/routes/copilot.py`, a panel in the same UI)
 - **Build**: paste a client's natural-language guidelines → the Copilot designs a full node graph.
