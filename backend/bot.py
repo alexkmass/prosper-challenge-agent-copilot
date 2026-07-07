@@ -39,6 +39,9 @@ from pipecat_flows import FlowManager
 from agent_builder import AgentBuilder
 from call_log import call_log
 from store import store
+from tools.crm_store import crm_store
+from tools.handlers import resolve_full_name
+from tools.resilience import CallResilienceProcessor
 
 # Load .env next to this file, so the bot runs the same from the repo root or backend/.
 load_dotenv(Path(__file__).parent / ".env", override=True)
@@ -47,6 +50,26 @@ load_dotenv(Path(__file__).parent / ".env", override=True)
 transport_params = {
     "webrtc": lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
 }
+
+
+def _maybe_create_crm_contact(state: dict) -> None:
+    """Create a CRM contact for a caller crm_lookup didn't find, using whatever the
+    call collected. Deterministic post-call step — no LLM/tool call involved. Skipped
+    if a `crm_create` tool edge already created (or reused) a contact mid-call.
+    """
+    if state.get("crm_found") is not False or state.get("crm_contact_id"):
+        return
+    first_name, last_name = resolve_full_name({}, state)
+    if not first_name:
+        return
+    contact = crm_store.create_contact(
+        first_name,
+        last_name or "",
+        insurance_id=state.get("insurance_id") or state.get("member_id"),
+        phone_number=state.get("phone_number"),
+        email=state.get("email"),
+    )
+    logger.info(f"Created CRM contact for new caller: {contact}")
 
 
 async def run_bot(
@@ -75,6 +98,9 @@ async def run_bot(
             context_aggregator.user(),
             llm,
             tts,
+            # Catches non-fatal STT/LLM/TTS ErrorFrames pushed by the services above and
+            # speaks a recovery line instead of letting the failure dead-end the turn.
+            CallResilienceProcessor(),
             transport.output(),
             context_aggregator.assistant(),
         ]
@@ -102,7 +128,9 @@ async def run_bot(
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         logger.info("Client disconnected")
+        state = call_log.snapshot()["state"]
         call_log.end()
+        _maybe_create_crm_contact(state)
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
@@ -125,10 +153,12 @@ async def bot(runner_args: RunnerArguments):
 if __name__ == "__main__":
     from pipecat.runner.run import app, main
 
-    from api import calls_router, router as agents_router
-    from copilot import router as copilot_router
+    from routes.agents import calls_router, router as agents_router
+    from routes.copilot import router as copilot_router
+    from routes.tools import router as tools_router
 
     app.include_router(agents_router)
     app.include_router(calls_router)
     app.include_router(copilot_router)
+    app.include_router(tools_router)
     main()

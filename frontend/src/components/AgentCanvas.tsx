@@ -16,11 +16,14 @@ import type { AgentConfig } from '../types/agent'
 import type { AgentDiff } from '../lib/agentDiff'
 import { agentToFlow, type FlowEdgeData, type FlowNodeData } from '../lib/agentGraph'
 import type { Selection } from '../hooks/useAgentEditor'
+import { AgentEdge } from './AgentEdge'
 import { AgentNode } from './AgentNode'
 import { Button } from '@/components/ui/button'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { LayoutGrid, Plus } from 'lucide-react'
 
 const nodeTypes = { agentNode: AgentNode }
+const edgeTypes = { agentEdge: AgentEdge }
 
 type AgentCanvasProps = {
   agentId: string | null
@@ -90,8 +93,7 @@ function AgentCanvasInner({
         selected: isSelected,
         zIndex: isHovered ? 1000 : undefined,
         style: { ...e.style, strokeWidth: isHovered ? 3 : (e.style?.strokeWidth ?? 1.5) },
-        labelStyle: isHovered ? { fontSize: 12, fontWeight: 600 } : { fontSize: 10 },
-        labelBgStyle: { ...e.labelBgStyle, fillOpacity: isHovered ? 0.95 : (e.labelBgStyle?.fillOpacity ?? 0.7) },
+        data: { ...e.data, hovered: isHovered } as FlowEdgeData,
       }
     })
     // Render the hovered edge last so it draws on top of anything it overlaps.
@@ -104,35 +106,38 @@ function AgentCanvasInner({
 
   return (
     <div className="relative h-full w-full">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        fitView
-        minZoom={0.3}
-        maxZoom={1.5}
-        proOptions={{ hideAttribution: true }}
-        deleteKeyCode={null}
-        nodesDraggable={interactive}
-        nodesConnectable={interactive}
-        elementsSelectable={interactive}
-        onNodesChange={handleNodesChange}
-        onConnect={(c: Connection) => {
-          if (interactive && c.source && c.target) onConnect(c.source, c.target)
-        }}
-        onNodeClick={(_, node) => interactive && onSelectNode(node.id)}
-        onEdgeClick={(_, edge) => {
-          const data = edge.data as FlowEdgeData | undefined
-          if (interactive && data) onSelectEdge(data.sourceNode, data.function)
-        }}
-        onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
-        onEdgeMouseLeave={() => setHoveredEdgeId(null)}
-        onPaneClick={() => interactive && onDeselect()}
-      >
-        <Background gap={16} size={1} />
-        <Controls showInteractive={false} />
-        <MiniMap pannable zoomable />
-      </ReactFlow>
+      <TooltipProvider delayDuration={150}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          minZoom={0.3}
+          maxZoom={1.5}
+          proOptions={{ hideAttribution: true }}
+          deleteKeyCode={null}
+          nodesDraggable={interactive}
+          nodesConnectable={interactive}
+          elementsSelectable={interactive}
+          onNodesChange={handleNodesChange}
+          onConnect={(c: Connection) => {
+            if (interactive && c.source && c.target) onConnect(c.source, c.target)
+          }}
+          onNodeClick={(_, node) => interactive && onSelectNode(node.id)}
+          onEdgeClick={(_, edge) => {
+            const data = edge.data as FlowEdgeData | undefined
+            if (interactive && data) onSelectEdge(data.sourceNode, data.function)
+          }}
+          onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
+          onEdgeMouseLeave={() => setHoveredEdgeId(null)}
+          onPaneClick={() => interactive && onDeselect()}
+        >
+          <Background gap={16} size={1} />
+          <Controls showInteractive={false} />
+          <MiniMap pannable zoomable />
+        </ReactFlow>
+      </TooltipProvider>
       {interactive && (
         <div className="absolute left-4 top-4 z-10 flex gap-1.5">
           <Button size="sm" onClick={onAddNode} className="shadow-sm" variant="secondary">

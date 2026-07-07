@@ -25,6 +25,14 @@ class Edge:
     # Fields to collect on this edge, as JSON-schema properties.
     properties: dict = field(default_factory=dict)
     required: list = field(default_factory=list)
+    # Optional key into backend/tools/registry.py's TOOL_REGISTRY — when set, taking
+    # this edge also runs that tool's real (dummy-backed) side effect. See
+    # specs/agent-tools.md.
+    tool: Optional[str] = None
+    # Fire-and-forget: don't await the tool before transitioning. Its result only
+    # reaches flow_manager.state (for a later tool handler to read), never the LLM's
+    # response for this turn — only meaningful alongside `tool`. See agent-tools.md.
+    tool_async: bool = False
 
     @classmethod
     def from_dict(cls, d: dict) -> "Edge":
@@ -34,6 +42,8 @@ class Edge:
             target=d["target"],
             properties=d.get("properties", {}),
             required=d.get("required", []),
+            tool=d.get("tool"),
+            tool_async=d.get("tool_async", False),
         )
 
 

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
 
 import type { AgentConfig, AgentEdge, EdgeProperty } from '../types/agent'
+import { TOOL_CATALOG, findTool, resolveToolPatch } from '../lib/toolCatalog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,10 +12,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+
+const NO_TOOL_VALUE = '__none__'
 
 type PropertyRow = { name: string; type: string; description: string; required: boolean }
 
@@ -50,9 +55,33 @@ type EdgeInspectorProps = {
 export function EdgeInspector({ agent, sourceNode, edge, onUpdate, onDelete }: EdgeInspectorProps) {
   const rows = useMemo(() => toRows(edge), [edge])
   const targets = agent.nodes.filter((n) => n.name !== sourceNode)
+  const selectedTool = findTool(edge.tool)
+  const categories = useMemo(() => Array.from(new Set(TOOL_CATALOG.map((t) => t.category))), [])
+  const siblingFunctions = useMemo(
+    () =>
+      new Set(
+        (agent.nodes.find((n) => n.name === sourceNode)?.edges ?? [])
+          .map((e) => e.function)
+          .filter((f) => f !== edge.function),
+      ),
+    [agent, sourceNode, edge.function],
+  )
 
   function updateRows(next: PropertyRow[]) {
     onUpdate(fromRows(next))
+  }
+
+  function uniqueFunctionName(base: string): string {
+    if (!siblingFunctions.has(base)) return base
+    let i = 2
+    while (siblingFunctions.has(`${base}_${i}`)) i++
+    return `${base}_${i}`
+  }
+
+  function handleToolChange(value: string) {
+    const patch = resolveToolPatch(edge, value === NO_TOOL_VALUE ? null : value)
+    if (patch.function) patch.function = uniqueFunctionName(patch.function)
+    onUpdate(patch)
   }
 
   return (
@@ -66,6 +95,45 @@ export function EdgeInspector({ agent, sourceNode, edge, onUpdate, onDelete }: E
       <p className="text-xs text-muted-foreground">
         From <span className="font-medium text-foreground">{sourceNode}</span>
       </p>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="edge-tool">Tool</Label>
+        <Select value={edge.tool ?? NO_TOOL_VALUE} onValueChange={handleToolChange}>
+          <SelectTrigger id="edge-tool" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_TOOL_VALUE}>No tool (plain transition)</SelectItem>
+            {categories.map((category) => (
+              <SelectGroup key={category}>
+                <SelectLabel>{category}</SelectLabel>
+                {TOOL_CATALOG.filter((t) => t.category === category).map((t) => (
+                  <SelectItem key={t.key} value={t.key}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedTool && (
+          <p className="text-xs text-muted-foreground">{selectedTool.defaultDescription}</p>
+        )}
+        {selectedTool && (
+          <label className="flex items-start gap-1.5 pt-1 text-xs text-muted-foreground">
+            <Checkbox
+              checked={edge.tool_async ?? false}
+              onCheckedChange={(checked) => onUpdate({ tool_async: Boolean(checked) })}
+            />
+            <span>
+              Run in the background (don't wait for it) — only for side effects the agent
+              doesn't need to react to right now, like sending a text or creating a CRM record.
+            </span>
+          </label>
+        )}
+      </div>
+
+      <Separator />
 
       <div className="space-y-1.5">
         <Label htmlFor="edge-function">Function name</Label>

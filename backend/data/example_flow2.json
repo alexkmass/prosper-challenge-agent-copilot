@@ -54,7 +54,8 @@
             "full_name": { "type": "string", "description": "Caller's full name." },
             "reason": { "type": "string", "description": "Reason for the visit." }
           },
-          "required": ["full_name", "reason"]
+          "required": ["full_name", "reason"],
+          "tool": "crm_lookup"
         }
       ]
     },
@@ -117,7 +118,9 @@
             "has_insurance": { "type": "boolean", "description": "Whether the caller has insurance." },
             "member_id": { "type": "string", "description": "Insurance member ID, if they have insurance." }
           },
-          "required": ["has_insurance"]
+          "required": ["has_insurance"],
+          "tool": "crm_create",
+          "tool_async": true
         }
       ]
     },
@@ -141,7 +144,8 @@
               "description": "The chosen appointment slot."
             }
           },
-          "required": ["slot"]
+          "required": ["slot"],
+          "tool": "appointment_book"
         },
         {
           "function": "escalate_no_availability",

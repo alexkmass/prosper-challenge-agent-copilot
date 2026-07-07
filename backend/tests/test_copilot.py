@@ -10,7 +10,7 @@ how to run/skip these.
 import pytest
 
 from agent_builder import AgentBuilder
-from copilot import AuditRequest, BuildRequest, FixRequest, audit_calls, build_agent, fix_issue
+from routes.copilot import AuditRequest, BuildRequest, FixRequest, audit_calls, build_agent, fix_issue
 
 pytestmark = pytest.mark.llm
 
@@ -46,7 +46,7 @@ async def test_audit_finds_the_seeded_issues_with_correct_node_attribution():
 
 
 async def test_fix_resolves_an_issue_and_still_produces_a_valid_agent(scheduler_config):
-    from copilot import IssueOut
+    from routes.copilot import IssueOut
 
     issue = IssueOut(
         call_id="call-2",

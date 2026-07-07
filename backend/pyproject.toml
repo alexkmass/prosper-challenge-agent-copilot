@@ -13,7 +13,7 @@ dependencies = [
     "pipecat-ai[runner,webrtc,silero,elevenlabs,openai]>=1.4.0,<2",
     # Pipecat Flows: node-graph conversations (used by the agent builder + bot).
     "pipecat-ai-flows>=1.3.0,<2",
-    # Used directly by copilot.py (structured-output Responses API calls),
+    # Used directly by routes/copilot.py (structured-output Responses API calls),
     # not just as a transitive pipecat dependency.
     "openai>=1.99,<3",
 ]

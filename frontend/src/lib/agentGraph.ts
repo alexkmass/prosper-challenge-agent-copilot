@@ -15,6 +15,9 @@ export type FlowEdgeData = {
   diffStatus?: DiffStatus
   sourceNode: string
   function: string
+  tool?: string
+  toolAsync?: boolean
+  hovered?: boolean
 }
 
 const NODE_WIDTH = 260
@@ -112,10 +115,15 @@ export function agentToFlow(
         source: node.name,
         target: edge.target,
         label: edge.description,
-        type: 'smoothstep',
+        type: 'agentEdge',
         style: EDGE_STYLES[status ?? 'unchanged'],
-        labelBgStyle: status ? { fill: EDGE_STYLES[status].stroke, fillOpacity: 0.15 } : undefined,
-        data: { diffStatus: status, sourceNode: node.name, function: edge.function },
+        data: {
+          diffStatus: status,
+          sourceNode: node.name,
+          function: edge.function,
+          tool: edge.tool,
+          toolAsync: edge.tool_async,
+        },
       }
     }),
   )
