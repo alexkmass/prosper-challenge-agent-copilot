@@ -3,6 +3,7 @@ import { Wrench, Zap } from 'lucide-react'
 
 import type { FlowEdgeData } from '../lib/agentGraph'
 import { findTool } from '../lib/toolCatalog'
+import { useToolCatalog } from '../hooks/useToolCatalog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
@@ -26,6 +27,13 @@ export function AgentEdge({
   data,
   selected,
 }: EdgeProps<Edge<FlowEdgeData>>) {
+  // Fan sibling edges apart: shift each one's routing (and therefore its label)
+  // horizontally by its slot among the edges leaving the same source, so
+  // parallel/overlapping edges stay readable — critical in the diff overlay.
+  const fanCount = data?.fanCount ?? 1
+  const fanIndex = data?.fanIndex ?? 0
+  const fanOffset = fanCount > 1 ? (fanIndex - (fanCount - 1) / 2) * 28 : 0
+
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -33,9 +41,11 @@ export function AgentEdge({
     targetX,
     targetY,
     targetPosition,
+    ...(fanOffset !== 0 ? { centerX: (sourceX + targetX) / 2 + fanOffset } : {}),
   })
 
-  const tool = data?.tool ? findTool(data.tool) : undefined
+  const toolCatalog = useToolCatalog()
+  const tool = data?.tool ? findTool(toolCatalog, data.tool) : undefined
   const hovered = Boolean(data?.hovered)
 
   return (

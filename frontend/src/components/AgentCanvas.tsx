@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  applyNodeChanges,
   Background,
   Controls,
   MiniMap,
@@ -20,7 +21,7 @@ import { AgentEdge } from './AgentEdge'
 import { AgentNode } from './AgentNode'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { LayoutGrid, Plus } from 'lucide-react'
+import { LayoutGrid, Loader2, Plus, ShieldCheck } from 'lucide-react'
 
 const nodeTypes = { agentNode: AgentNode }
 const edgeTypes = { agentEdge: AgentEdge }
@@ -36,6 +37,8 @@ type AgentCanvasProps = {
   onDeselect: () => void
   onConnect: (source: string, target: string) => void
   onAddNode: () => void
+  onValidate: () => void
+  validating: boolean
 }
 
 function AgentCanvasInner({
@@ -49,40 +52,60 @@ function AgentCanvasInner({
   onDeselect,
   onConnect,
   onAddNode,
+  onValidate,
+  validating,
 }: AgentCanvasProps) {
   const { nodes: baseNodes, edges: baseEdges } = useMemo(() => agentToFlow(config, diff), [config, diff])
 
-  // Manual drag positions, kept in memory only (never persisted) — cleared when
-  // switching agents or when the user asks to auto-arrange again.
-  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({})
+  // React Flow owns the live node list: a drag mutates only the dragged node via
+  // applyNodeChanges, rather than rebuilding every node object each frame (which
+  // handed React Flow a fresh array mid-drag and made the whole tree flinch).
+  // Manual drag positions are remembered in a ref (in-memory only, never
+  // persisted) so they survive re-derivation when the graph/diff/selection
+  // changes, and are cleared on agent switch or "Reorder".
+  const positionsRef = useRef<Record<string, { x: number; y: number }>>({})
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
 
+  // Dragging is always allowed — positions are in-memory only, so rearranging
+  // for clarity is safe even while reviewing a diff.
+  const seedNodes = useCallback(
+    (source: Node<FlowNodeData>[]): Node<FlowNodeData>[] =>
+      source.map((n) => ({
+        ...n,
+        position: positionsRef.current[n.id] ?? n.position,
+        selected: selection?.kind === 'node' && selection.name === n.id,
+        draggable: true,
+      })),
+    [selection],
+  )
+
+  const [nodes, setNodes] = useState<Node<FlowNodeData>[]>(() => seedNodes(baseNodes))
+
+  // Forget manual positions on agent switch (runs before the re-seed effect below).
   useEffect(() => {
-    setPositions({})
+    positionsRef.current = {}
   }, [agentId])
 
-  function handleNodesChange(changes: NodeChange<Node<FlowNodeData>>[]) {
-    const moved = changes.filter((c): c is Extract<typeof c, { type: 'position' }> => c.type === 'position')
-    if (moved.length === 0) return
-    setPositions((prev) => {
-      const next = { ...prev }
-      for (const change of moved) {
-        if (change.position) next[change.id] = change.position
-      }
-      return next
-    })
-  }
+  // Re-derive from the laid-out graph on structural/selection changes only —
+  // never on a drag frame, so drags stay smooth (positionsRef is read here, not
+  // a dependency).
+  useEffect(() => {
+    setNodes(seedNodes(baseNodes))
+  }, [baseNodes, seedNodes])
 
-  const nodes: Node<FlowNodeData>[] = useMemo(
-    () =>
-      baseNodes.map((n) => ({
-        ...n,
-        position: positions[n.id] ?? n.position,
-        selected: selection?.kind === 'node' && selection.name === n.id,
-        draggable: interactive,
-      })),
-    [baseNodes, positions, selection, interactive],
-  )
+  const handleNodesChange = useCallback((changes: NodeChange<Node<FlowNodeData>>[]) => {
+    setNodes((nds) => applyNodeChanges(changes, nds))
+    for (const change of changes) {
+      if (change.type === 'position' && change.position) {
+        positionsRef.current[change.id] = change.position
+      }
+    }
+  }, [])
+
+  const reorder = useCallback(() => {
+    positionsRef.current = {}
+    setNodes(seedNodes(baseNodes))
+  }, [baseNodes, seedNodes])
 
   const edges: Edge<FlowEdgeData>[] = useMemo(() => {
     const styled = baseEdges.map((e) => {
@@ -117,7 +140,7 @@ function AgentCanvasInner({
           maxZoom={1.5}
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={null}
-          nodesDraggable={interactive}
+          nodesDraggable
           nodesConnectable={interactive}
           elementsSelectable={interactive}
           onNodesChange={handleNodesChange}
@@ -146,13 +169,24 @@ function AgentCanvasInner({
           </Button>
           <Button
             size="sm"
-            onClick={() => setPositions({})}
+            onClick={reorder}
             className="shadow-sm"
             variant="secondary"
             title="Recalculate node positions"
           >
             <LayoutGrid className="size-4" />
             Reorder
+          </Button>
+          <Button
+            size="sm"
+            onClick={onValidate}
+            disabled={validating}
+            className="shadow-sm"
+            variant="secondary"
+            title="Run structural checks and an LLM design review"
+          >
+            {validating ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+            {validating ? 'Validating…' : 'Validate'}
           </Button>
         </div>
       )}

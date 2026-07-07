@@ -1,4 +1,4 @@
-import { Check, X } from 'lucide-react'
+import { Check, MessageSquareText, X } from 'lucide-react'
 
 import type { AgentDiff } from '../lib/agentDiff'
 import { Button } from '@/components/ui/button'
@@ -7,12 +7,14 @@ import { Badge } from '@/components/ui/badge'
 type DiffReviewPanelProps = {
   title: string
   changes: string[]
+  /** Copilot's plain-English account of what changed and why (absent for manual diffs). */
+  explanation?: string
   diff: AgentDiff
   onApply: () => void
   onDiscard: () => void
 }
 
-export function DiffReviewPanel({ title, changes, diff, onApply, onDiscard }: DiffReviewPanelProps) {
+export function DiffReviewPanel({ title, changes, explanation, diff, onApply, onDiscard }: DiffReviewPanelProps) {
   const added = [...diff.nodeStatus.values()].filter((s) => s === 'added').length
   const removed = [...diff.nodeStatus.values()].filter((s) => s === 'removed').length
   const modified = [...diff.nodeStatus.values()].filter((s) => s === 'modified').length
@@ -43,15 +45,30 @@ export function DiffReviewPanel({ title, changes, diff, onApply, onDiscard }: Di
         {!diff.hasChanges && <Badge variant="outline">No changes</Badge>}
       </div>
 
+      {explanation && (
+        <div className="space-y-1.5 rounded-md border bg-muted/40 p-3">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <MessageSquareText className="size-3.5 text-primary" />
+            What changed & why
+          </div>
+          <p className="text-sm leading-relaxed text-muted-foreground">{explanation}</p>
+        </div>
+      )}
+
       {changes.length > 0 && (
-        <ul className="space-y-1.5 text-sm text-muted-foreground">
-          {changes.map((c, i) => (
-            <li key={i} className="flex gap-1.5">
-              <span className="text-primary">•</span>
-              {c}
-            </li>
-          ))}
-        </ul>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Exact changes
+          </p>
+          <ul className="space-y-1.5 text-sm text-muted-foreground">
+            {changes.map((c, i) => (
+              <li key={i} className="flex gap-1.5">
+                <span className="text-primary">•</span>
+                {c}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="mt-auto flex gap-2 border-t pt-4">

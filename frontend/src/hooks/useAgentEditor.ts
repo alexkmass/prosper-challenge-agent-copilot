@@ -17,7 +17,12 @@ export function useAgentEditor() {
   const [savedAgent, setSavedAgent] = useState<AgentConfig | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
   const [preview, setPreview] = useState<AgentConfig | null>(null)
-  const [previewMeta, setPreviewMeta] = useState<{ title: string; changes: string[] } | null>(null)
+  const [previewMeta, setPreviewMeta] = useState<{
+    title: string
+    changes: string[]
+    /** Optional plain-English account from the Copilot (absent for manual diffs). */
+    explanation?: string
+  } | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -87,11 +92,14 @@ export function useAgentEditor() {
     }
   }, [agentId, agent, refreshAgents])
 
-  const proposePreview = useCallback((config: AgentConfig, meta: { title: string; changes: string[] }) => {
-    setPreview(config)
-    setPreviewMeta(meta)
-    setSelection(null)
-  }, [])
+  const proposePreview = useCallback(
+    (config: AgentConfig, meta: { title: string; changes: string[]; explanation?: string }) => {
+      setPreview(config)
+      setPreviewMeta(meta)
+      setSelection(null)
+    },
+    [],
+  )
 
   const applyPreview = useCallback(() => {
     if (!preview) return

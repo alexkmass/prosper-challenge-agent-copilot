@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ExternalLink, ListChecks, Sparkles } from 'lucide-react'
 
 import { AgentCanvas } from './components/AgentCanvas'
 import { AgentPicker } from './components/AgentPicker'
+import { AppBrand } from './components/AppBrand'
 import { AgentSettingsPanel } from './components/AgentSettingsPanel'
 import { CallLogSheet } from './components/CallLogSheet'
+import type { ChatSeed } from './components/CopilotChat'
 import { CopilotPanel } from './components/CopilotPanel'
 import { DiffReviewPanel } from './components/DiffReviewPanel'
 import { EdgeInspector } from './components/EdgeInspector'
 import { NodeInspector } from './components/NodeInspector'
+import { ValidationPanel } from './components/ValidationPanel'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -19,7 +22,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useAgentEditor } from './hooks/useAgentEditor'
-import { setActiveAgentId } from './lib/api'
+import { copilotValidate, setActiveAgentId } from './lib/api'
+import { validationFindingsPrompt } from './lib/validationPrompt'
 import { diffAgents, summarizeDiff } from './lib/agentDiff'
 import {
   addEdge,
@@ -33,20 +37,30 @@ import {
   updateNode,
 } from './lib/agentMutations'
 import type { AgentConfig, AgentEdge } from './types/agent'
+import type { CopilotMode, ValidationFinding } from './types/copilot'
 import './App.css'
 
 type SidebarMode = 'inspector' | 'copilot'
 type PendingSwitch = { type: 'select'; id: string } | { type: 'create' }
+type ValidationState = { loading: boolean; findings: ValidationFinding[]; error: string | null }
 
 export default function App() {
   const editor = useAgentEditor()
   const { agent, agentId, selection, preview, previewMeta } = editor
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('inspector')
+  const [copilotTab, setCopilotTab] = useState<CopilotMode>('build')
+  const [improveSeed, setImproveSeed] = useState<ChatSeed | null>(null)
+  const [validation, setValidation] = useState<ValidationState | null>(null)
   const [testCallBusy, setTestCallBusy] = useState(false)
   const [testCallError, setTestCallError] = useState<string | null>(null)
   const [callLogOpen, setCallLogOpen] = useState(false)
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null)
   const [switching, setSwitching] = useState(false)
+
+  // A validation report belongs to the agent it was run on — drop it on switch.
+  useEffect(() => {
+    setValidation(null)
+  }, [agentId])
 
   const diff = useMemo(() => (agent && preview ? diffAgents(agent, preview) : null), [agent, preview])
 
@@ -94,10 +108,32 @@ export default function App() {
     editor.setSelection(null)
   }
 
-  function handlePropose(config: AgentConfig, title: string) {
+  function handlePropose(config: AgentConfig, title: string, explanation: string) {
     if (!agent) return
+    setValidation(null)
     const d = diffAgents(agent, config)
-    editor.proposePreview(config, { title, changes: summarizeDiff(d) })
+    editor.proposePreview(config, { title, changes: summarizeDiff(d), explanation })
+  }
+
+  async function handleValidate() {
+    if (!agent) return
+    editor.setSelection(null)
+    setSidebarMode('inspector')
+    setValidation({ loading: true, findings: [], error: null })
+    try {
+      const { findings } = await copilotValidate(agent)
+      setValidation({ loading: false, findings, error: null })
+    } catch (e) {
+      setValidation({ loading: false, findings: [], error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  // Hand validation findings to the Improve chat so the Copilot can act on them.
+  function handleSendValidationToChat(findings: ValidationFinding[]) {
+    setImproveSeed({ id: `validation-${Date.now()}`, prompt: validationFindingsPrompt(findings) })
+    setCopilotTab('improve')
+    setSidebarMode('copilot')
+    setValidation(null)
   }
 
   async function handleSave() {
@@ -166,7 +202,7 @@ export default function App() {
     <div className="flex h-screen flex-col bg-background">
       <header className="flex h-14 shrink-0 items-center justify-between border-b bg-card px-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold text-foreground">Voice Agent Builder</h1>
+          <AppBrand />
           <AgentPicker
             agents={editor.agents}
             agentId={agentId}
@@ -181,9 +217,12 @@ export default function App() {
             <span className="text-xs text-muted-foreground">Unsaved changes</span>
           )}
           <Button
-            variant={sidebarMode === 'copilot' ? 'default' : 'outline'}
+            variant={sidebarMode === 'copilot' && !validation ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setSidebarMode((m) => (m === 'copilot' ? 'inspector' : 'copilot'))}
+            onClick={() => {
+              setValidation(null)
+              setSidebarMode((m) => (m === 'copilot' ? 'inspector' : 'copilot'))
+            }}
           >
             <Sparkles className="size-4" />
             Copilot
@@ -215,14 +254,18 @@ export default function App() {
               onSelectNode={(name) => {
                 editor.setSelection({ kind: 'node', name })
                 setSidebarMode('inspector')
+                setValidation(null)
               }}
               onSelectEdge={(node, fn) => {
                 editor.setSelection({ kind: 'edge', node, function: fn })
                 setSidebarMode('inspector')
+                setValidation(null)
               }}
               onDeselect={() => editor.setSelection(null)}
               onConnect={handleConnect}
               onAddNode={handleAddNode}
+              onValidate={handleValidate}
+              validating={Boolean(validation?.loading)}
             />
           )}
         </main>
@@ -231,13 +274,31 @@ export default function App() {
           {showingPreview && diff && previewMeta ? (
             <DiffReviewPanel
               title={previewMeta.title}
+              explanation={previewMeta.explanation}
               changes={previewMeta.changes}
               diff={diff}
               onApply={editor.applyPreview}
               onDiscard={editor.discardPreview}
             />
+          ) : validation ? (
+            <ValidationPanel
+              loading={validation.loading}
+              findings={validation.findings}
+              error={validation.error}
+              onClose={() => setValidation(null)}
+              onSelectNode={(name) => editor.setSelection({ kind: 'node', name })}
+              onSendToChat={handleSendValidationToChat}
+            />
           ) : sidebarMode === 'copilot' && agentId && agent ? (
-            <CopilotPanel agentId={agentId} agent={agent} onPropose={handlePropose} />
+            <CopilotPanel
+              agentId={agentId}
+              agent={agent}
+              onPropose={handlePropose}
+              tab={copilotTab}
+              onTabChange={setCopilotTab}
+              improveSeed={improveSeed}
+              onImproveSeedConsumed={() => setImproveSeed(null)}
+            />
           ) : selection?.kind === 'node' && selectedNode && agent ? (
             <NodeInspector
               agent={agent}

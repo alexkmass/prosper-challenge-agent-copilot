@@ -18,6 +18,12 @@ export type FlowEdgeData = {
   tool?: string
   toolAsync?: boolean
   hovered?: boolean
+  /** Position among the edges leaving the same source, used to fan them out so
+   *  parallel/overlapping edges (and their labels) don't stack — matters most
+   *  in the diff overlay, where an old (removed) and new (added) edge often
+   *  share a source. */
+  fanIndex?: number
+  fanCount?: number
 }
 
 const NODE_WIDTH = 260
@@ -127,6 +133,18 @@ export function agentToFlow(
       }
     }),
   )
+
+  // Fan edges that leave the same source apart. Without this, two edges dropping
+  // to targets in the same column overlap — invisible in the diff overlay, where
+  // you specifically need to compare an old vs. new transition side by side.
+  const outgoingCount = new Map<string, number>()
+  for (const e of edges) outgoingCount.set(e.source, (outgoingCount.get(e.source) ?? 0) + 1)
+  const outgoingSeen = new Map<string, number>()
+  for (const e of edges) {
+    const seen = outgoingSeen.get(e.source) ?? 0
+    outgoingSeen.set(e.source, seen + 1)
+    e.data = { ...e.data!, fanIndex: seen, fanCount: outgoingCount.get(e.source)! }
+  }
 
   return { nodes, edges }
 }

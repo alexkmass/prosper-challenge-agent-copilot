@@ -10,7 +10,7 @@ let the code and the spec drift apart.
 | --- | --- |
 | [agent-schema-and-builder.md](agent-schema-and-builder.md) | The declarative `AgentConfig`/`Node`/`Edge` contract and the compiler/validator (`AgentBuilder`) that turns it into a runnable Pipecat Flows graph. Foundational — everything else reads and writes this. |
 | [voice-agent-builder-ui.md](voice-agent-builder-ui.md) | Phase 1: the React graph editor, agent CRUD, test calls, and the call log. |
-| [agent-copilot.md](agent-copilot.md) | Phase 2: the Build and Improve Copilot modes. |
+| [agent-copilot.md](agent-copilot.md) | Phase 2: the Build and Improve Copilot modes, refinement chat, Validate (structural + design review), and the shared diff → apply flow. |
 | [agent-tools.md](agent-tools.md) | Real (dummy-backed) tools an edge can call — appointment booking, CRM, SMS/email — plus the global human-escalation and call-resilience behaviors every agent gets automatically. |
 
 Each spec follows the same shape: Overview → Goals/Non-goals → Requirements (data contracts +

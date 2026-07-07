@@ -59,6 +59,18 @@ Backed by `backend/store.py`'s `AgentStore` (in-memory, CRUD + one "active" poin
 - **FR-5a**: An edge carrying a tool (see [agent-tools.md](agent-tools.md)) shows a small badge on
   its label — no need to open the inspector just to see which edges do more than transition.
 
+### Validate (canvas toolbar)
+
+- **FR-5b**: A **Validate** button on the canvas toolbar runs `POST /api/copilot/validate` against
+  the current in-memory draft (not necessarily saved). While running, the button shows a loading
+  state. Results open in the right sidebar as a **Validation** panel (replacing the inspector for
+  that moment): findings sorted by severity, tagged **structural** vs **design review**, with
+  checkboxes (errors and warnings checked by default). Clicking a node name in a finding selects
+  that node on the canvas. **Fix in Improve chat** sends the selected findings to the Copilot
+  Improve tab as a seeded chat message (`validationFindingsPrompt`). The validation report is
+  cleared when switching agents, opening the Copilot panel, selecting a node/edge, or applying a
+  Copilot proposal.
+
 ### Node editing
 
 - **FR-6**: Selecting a node opens an inspector to edit: `name` (rename cascades to every edge
@@ -125,7 +137,8 @@ Backed by `backend/call_store.py`'s `CallStore` (in-memory, same seam-behind-an-
   the latest; selecting one shows three tabs — **Transcript** (caller/agent turns in order),
   **Path & data** (the ordered list of nodes visited, which edge function led to each, the fields
   collected at that step, and an accumulated `state` dict merging everything collected across the
-  call), and **Stats** (below).
+  call — nested objects/arrays shown as collapsible JSON summaries, not `[object Object]`),
+  and **Stats** (below).
 - **FR-16**: `call_store.start_call(agent_id, agent_name, initial_node)` is called on
   `on_client_connected`, creating a new call record and seeding its visit list with the initial node.
   `on_client_disconnected` only cancels the pipeline worker; `call_store.end_call(call_id)` runs in a
@@ -189,8 +202,9 @@ Verified by manual browser testing:
 
 ## Related
 
-- Code: `frontend/src/**`, `backend/routes/agents.py`, `backend/store.py`, `backend/call_store.py`,
-  `backend/call_recorder.py`, `backend/bot.py`
+- Code: `frontend/src/**`, `backend/routes/agents.py`, `backend/routes/copilot.py` (validate only),
+  `backend/store.py`, `backend/call_store.py`, `backend/call_recorder.py`, `backend/bot.py`,
+  `frontend/src/components/ValidationPanel.tsx`
 - See also: [agent-tools.md](agent-tools.md) — the tool catalog behind FR-10a, and the call
   resilience processor added to `bot.py`'s pipeline.
 - Tradeoffs: [solution.md](../solution.md) — "What's built" and "What's mocked, deferred, or cut"

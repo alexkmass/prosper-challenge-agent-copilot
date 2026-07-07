@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 
 import { getCall, listCalls } from '../lib/api'
 import type { CallRecord, CallSummary, MetricBucket } from '../types/callLog'
@@ -28,6 +28,67 @@ function formatDuration(secs: number): string {
 
 function formatSecs(secs: number | null): string {
   return secs === null ? '—' : `${secs.toFixed(2)}s`
+}
+
+function formatCallValue(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function isComplexCallValue(value: unknown): boolean {
+  return value !== null && typeof value === 'object'
+}
+
+function summarizeCallValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `array (${value.length} item${value.length === 1 ? '' : 's'})`
+  }
+  if (value && typeof value === 'object') {
+    const count = Object.keys(value as object).length
+    return `object (${count} key${count === 1 ? '' : 's'})`
+  }
+  return formatCallValue(value)
+}
+
+function CollectedValue({ name, value, emphasized }: { name: string; value: unknown; emphasized?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const complex = isComplexCallValue(value)
+
+  if (!complex) {
+    return (
+      <div className="flex gap-1.5">
+        <span className="text-muted-foreground">{name}:</span>
+        <span className={cn(emphasized && 'font-medium', 'text-foreground')}>{formatCallValue(value)}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        className="flex items-center gap-1 text-left text-foreground hover:opacity-80"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        {open ? <ChevronDown className="size-3 shrink-0" /> : <ChevronRight className="size-3 shrink-0" />}
+        <span className="text-muted-foreground">{name}:</span>
+        <span className={cn(emphasized && 'font-medium')}>{summarizeCallValue(value)}</span>
+      </button>
+      {open && (
+        <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-1.5 font-mono text-[10px] text-foreground">
+          {formatCallValue(value)}
+        </pre>
+      )}
+    </div>
+  )
 }
 
 const BUCKET_LABEL: Record<MetricBucket, string> = { llm: 'LLM', stt: 'STT', tts: 'TTS' }
@@ -210,12 +271,9 @@ function CallDetail({ record }: { record: CallRecord }) {
                   {visit.via_function && <span className="shrink-0 text-muted-foreground">via {visit.via_function}</span>}
                 </div>
                 {Object.keys(visit.collected).length > 0 && (
-                  <div className="mt-1.5 space-y-0.5">
+                  <div className="mt-1.5 space-y-1">
                     {Object.entries(visit.collected).map(([k, v]) => (
-                      <div key={k} className="flex gap-1.5">
-                        <span className="text-muted-foreground">{k}:</span>
-                        <span className="text-foreground">{String(v)}</span>
-                      </div>
+                      <CollectedValue key={k} name={k} value={v} />
                     ))}
                   </div>
                 )}
@@ -230,12 +288,9 @@ function CallDetail({ record }: { record: CallRecord }) {
             {Object.keys(record.state).length === 0 ? (
               <p className="text-xs text-muted-foreground">Nothing collected yet.</p>
             ) : (
-              <div className="space-y-0.5 rounded-md border bg-muted/40 p-2.5 text-xs">
+              <div className="space-y-1 rounded-md border bg-muted/40 p-2.5 text-xs">
                 {Object.entries(record.state).map(([k, v]) => (
-                  <div key={k} className="flex gap-1.5">
-                    <span className="text-muted-foreground">{k}:</span>
-                    <span className="font-medium text-foreground">{String(v)}</span>
-                  </div>
+                  <CollectedValue key={k} name={k} value={v} emphasized />
                 ))}
               </div>
             )}
