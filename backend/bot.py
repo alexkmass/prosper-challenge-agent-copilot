@@ -15,6 +15,7 @@
 
 import os
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -37,7 +38,8 @@ from pipecat.workers.runner import WorkerRunner
 from pipecat_flows import FlowManager
 
 from agent_builder import AgentBuilder
-from call_log import call_log
+from call_recorder import CallRecorderObserver
+from call_store import call_store
 from store import store
 from tools.crm_store import crm_store
 from tools.handlers import resolve_full_name
@@ -73,7 +75,7 @@ def _maybe_create_crm_contact(state: dict) -> None:
 
 
 async def run_bot(
-    transport: BaseTransport, runner_args: RunnerArguments, builder: AgentBuilder
+    transport: BaseTransport, runner_args: RunnerArguments, builder: AgentBuilder, agent_id: str
 ) -> None:
     config = builder.config
     logger.info(f"Starting '{config.name}' with {len(config.nodes)} nodes")
@@ -110,6 +112,9 @@ async def run_bot(
         pipeline,
         params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
         idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
+        # Mirrors transcript, node path, per-service timings, and errors into
+        # call_store for the Call log UI — pure observer, doesn't touch frames.
+        observers=[CallRecorderObserver(call_store)],
     )
 
     flow_manager = FlowManager(
@@ -119,23 +124,32 @@ async def run_bot(
         transport=transport,
     )
 
+    call_id: Optional[str] = None
+
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
+        nonlocal call_id
         logger.info("Client connected — starting flow at initial node")
-        call_log.start(config.initial_node)
+        call_id = call_store.start_call(agent_id, config.name, config.initial_node)
         await flow_manager.initialize(builder.build_initial_node())
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         logger.info("Client disconnected")
-        state = call_log.snapshot()["state"]
-        call_log.end()
-        _maybe_create_crm_contact(state)
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
     await runner.add_workers(worker)
-    await runner.run()
+    try:
+        await runner.run()
+    finally:
+        # Guaranteed to run once the pipeline stops, regardless of why — a clean
+        # on_client_disconnected, a dropped connection, or an idle timeout all end up here,
+        # so a call is never left "active" forever because its disconnect event never fired.
+        if call_id is not None:
+            state = call_store.get(call_id)["state"]
+            call_store.end_call(call_id)
+            _maybe_create_crm_contact(state)
 
 
 async def bot(runner_args: RunnerArguments):
@@ -146,8 +160,8 @@ async def bot(runner_args: RunnerArguments):
     """
     transport = await create_transport(runner_args, transport_params)
     active_id = store.get_active_id()
-    builder = AgentBuilder.from_dict(store.get(active_id), on_transition=call_log.record_transition)
-    await run_bot(transport, runner_args, builder)
+    builder = AgentBuilder.from_dict(store.get(active_id), on_transition=call_store.record_transition)
+    await run_bot(transport, runner_args, builder, agent_id=active_id)
 
 
 if __name__ == "__main__":

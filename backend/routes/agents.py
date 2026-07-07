@@ -6,17 +6,32 @@
 from fastapi import APIRouter, HTTPException
 
 from agent_builder import AgentBuilder
-from call_log import call_log
+from call_store import CallNotFoundError, call_store
 from store import AgentNotFoundError, store
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 calls_router = APIRouter(prefix="/api/calls", tags=["calls"])
 
 
-@calls_router.get("/log")
-async def get_call_log():
-    """The current/most recent test call: nodes visited and fields collected along the way."""
-    return call_log.snapshot()
+@calls_router.get("")
+async def list_calls():
+    """Every test call this session, most recent first — id, agent, caller, timing, counts."""
+    return call_store.list()
+
+
+@calls_router.get("/active")
+async def get_active_call():
+    """The id of the test call currently in progress, if any (for polling while a call is live)."""
+    return {"id": call_store.get_active_id()}
+
+
+@calls_router.get("/{call_id}")
+async def get_call(call_id: str):
+    """One test call in full: transcript, node path, collected state, and stats."""
+    try:
+        return call_store.get(call_id)
+    except CallNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Call not found: {call_id}")
 
 
 @router.get("")
