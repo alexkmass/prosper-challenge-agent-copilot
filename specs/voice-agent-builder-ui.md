@@ -127,10 +127,12 @@ Backed by `backend/call_store.py`'s `CallStore` (in-memory, same seam-behind-an-
   collected at that step, and an accumulated `state` dict merging everything collected across the
   call), and **Stats** (below).
 - **FR-16**: `call_store.start_call(agent_id, agent_name, initial_node)` is called on
-  `on_client_connected`, creating a new call record and seeding its visit list with the initial node;
-  `call_store.end_call()` is called on `on_client_disconnected`, marking the call `status: "ended"`.
-  Unlike the single-call `CallLog` this replaced, starting a new call does not discard the previous
-  one — every call from the session is kept (bounded to the most recent 200) and browsable.
+  `on_client_connected`, creating a new call record and seeding its visit list with the initial node.
+  `on_client_disconnected` only cancels the pipeline worker; `call_store.end_call(call_id)` runs in a
+  `finally` block after `await runner.run()`, so cleanup fires whether the call ended cleanly, the
+  connection dropped, or the pipeline hit an idle timeout — not only when the disconnect handler
+  fires. Unlike the single-call `CallLog` this replaced, starting a new call does not discard the
+  previous one — every call from the session is kept (bounded to the most recent 200) and browsable.
 - **FR-17**: `backend/call_recorder.py`'s `CallRecorderObserver` is attached to the `PipelineWorker`
   via `observers=[...]` (a pure Pipecat `BaseObserver`, not a `FrameProcessor` — it only reads frames
   flowing through the pipeline, so it can't alter or drop them, and it composes cleanly alongside
