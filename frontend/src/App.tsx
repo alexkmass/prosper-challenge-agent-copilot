@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, ListChecks, Sparkles } from 'lucide-react'
 
 import { AgentCanvas } from './components/AgentCanvas'
@@ -56,9 +56,11 @@ export default function App() {
   const [callLogOpen, setCallLogOpen] = useState(false)
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null)
   const [switching, setSwitching] = useState(false)
+  const validationRequestRef = useRef(0)
 
   // A validation report belongs to the agent it was run on — drop it on switch.
   useEffect(() => {
+    validationRequestRef.current += 1
     setValidation(null)
   }, [agentId])
 
@@ -117,13 +119,16 @@ export default function App() {
 
   async function handleValidate() {
     if (!agent) return
+    const requestId = ++validationRequestRef.current
     editor.setSelection(null)
     setSidebarMode('inspector')
     setValidation({ loading: true, findings: [], error: null })
     try {
       const { findings } = await copilotValidate(agent)
+      if (requestId !== validationRequestRef.current) return
       setValidation({ loading: false, findings, error: null })
     } catch (e) {
+      if (requestId !== validationRequestRef.current) return
       setValidation({ loading: false, findings: [], error: e instanceof Error ? e.message : String(e) })
     }
   }
