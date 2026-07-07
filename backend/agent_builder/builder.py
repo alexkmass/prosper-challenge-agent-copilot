@@ -32,6 +32,7 @@ class AgentBuilder:
         self.config = config
         self._nodes_by_name = {n.name: n for n in config.nodes}
         self._on_transition = on_transition
+        self._background_tasks: set[asyncio.Task] = set()
         self._validate()
 
     # ---- loading -----------------------------------------------------------
@@ -131,9 +132,12 @@ class AgentBuilder:
                     # tool's real result only reaches flow_manager.state once it
                     # finishes, for a *later* tool handler to read (e.g. appointment_book
                     # picking up crm_contact_id) — the LLM never sees it directly.
-                    asyncio.create_task(
+                    task = asyncio.create_task(
                         self._run_tool_in_background(edge, args, flow_manager)
                     )
+                    # Keep a strong reference so GC can't collect an in-flight task.
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
                 else:
                     # The tool's real (dummy-backed) result — e.g. crm_found, available_slots
                     # — is what the LLM actually reacts to; it's merged in before the state
